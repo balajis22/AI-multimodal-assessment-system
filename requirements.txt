@@ -1,6 +1,9 @@
 # Deep Learning & Vision
+# Use CPU PyTorch on Streamlit Cloud to avoid downloading GPU/CUDA packages.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.14.1+cpu
 tensorflow
-opencv-python
+opencv-contrib-python
 mediapipe
 cvzone
 pillow
@@ -22,6 +25,7 @@ sentence-transformers
 
 # Web Application
 streamlit
+requests
 
 # Downgrade if u have updated one
 setuptools<=80.10.2

@@ -231,6 +231,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+**/.streamlit/secrets.toml
 
 # Scratch & temporary reverse-engineering artifacts
 scratch_*

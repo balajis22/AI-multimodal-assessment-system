@@ -1,13 +1,23 @@
-import streamlit as st
-import time
 import sys
+import time
 from pathlib import Path
 
+import streamlit as st
+
 # --------------------------------------------------
-# Import backend
+# Ensure the app can be run both as a standalone module and as a package entry
+# point (for example from a repository root streamlit_app.py wrapper).
 # --------------------------------------------------
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.append(str(ROOT))
+FRONTEND_ROOT = Path(__file__).resolve().parent
+for _path in (str(ROOT), str(FRONTEND_ROOT)):
+    if _path not in sys.path:
+        sys.path.insert(0, _path)
+
+try:
+    from .auth.auth_ui import render_auth, render_authenticated_controls
+except ImportError:
+    from auth.auth_ui import render_auth, render_authenticated_controls
 
 # Keep the AI model loading behind the actual interview action so the
 # Streamlit UI can render without importing the full backend stack on startup.
@@ -33,11 +43,20 @@ def get_interview_service():
 # Page Configuration
 # --------------------------------------------------
 st.set_page_config(
-    page_title="AI Interview Assessment Studio",
+    page_title="AI Multimodal Assessment System",
     page_icon="🎙️",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
+
+if (
+    not isinstance(st.session_state.get("auth_user"), dict)
+    or not st.session_state.get("auth_id_token")
+):
+    render_auth()
+    st.stop()
+
+render_authenticated_controls()
 
 # --------------------------------------------------
 # Session State Initialization
@@ -50,6 +69,18 @@ if "candidate_name" not in st.session_state:
 
 if "candidate_email" not in st.session_state:
     st.session_state.candidate_email = ""
+
+candidate_profile = st.session_state.get("candidate_profile", {})
+if (
+    isinstance(candidate_profile, dict)
+    and candidate_profile.get("uid") == st.session_state["auth_user"].get("uid")
+):
+    st.session_state.candidate_name = (
+        candidate_profile.get("name") or st.session_state.candidate_name
+    )
+    st.session_state.candidate_email = (
+        candidate_profile.get("email") or st.session_state.candidate_email
+    )
 
 if "active_role" not in st.session_state:
     st.session_state.active_role = "Software Engineer"
