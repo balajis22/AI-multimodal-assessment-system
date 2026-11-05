@@ -1,10 +1,8 @@
-from faster_whisper import WhisperModel
+from backend.services.ai_service_client import transcribe_file as _transcribe_remote
 
 
 def transcribe_file(audio_file="sample.wav"):
-    model = WhisperModel("base", device="cpu", compute_type="int8")
-    segments, _ = model.transcribe(audio_file, beam_size=5)
-    return " ".join(segment.text.strip() for segment in segments).strip()
+    return _transcribe_remote(audio_file)
 
 
 if __name__ == "__main__":

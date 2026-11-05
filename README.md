@@ -51,9 +51,9 @@ This project includes a repository-root `streamlit_app.py` entrypoint so it can 
 streamlit run streamlit_app.py
 ```
 
-If you are using Streamlit Cloud, connect the repository to GitHub and choose the branch you want to publish. For Firebase authentication, add your configuration in `.streamlit/secrets.toml` using the `firebase.api_key` key.
+The Streamlit app runs TensorFlow, MediaPipe, and YAMNet. Whisper transcription and Sentence Transformers scoring run in the separate Docker service in `whisper_service/`, keeping PyTorch out of the TensorFlow process. Deploy that service and configure `ai_service_url` and `ai_service_token` in Streamlit Cloud secrets as described in [`whisper_service/README.md`](whisper_service/README.md).
 
-The deployment dependencies select CPU-only PyTorch so Streamlit Cloud does not download GPU/CUDA runtime packages.
+For Streamlit Community Cloud, select Python 3.12 in Advanced settings when creating the app; the TensorFlow version in this repository does not support the Python 3.14 environment shown in the earlier deployment logs. Community Cloud does not let you change an existing app's Python version; delete and redeploy it to select another version. Add Firebase configuration in Streamlit secrets using the `firebase.api_key` key if Firebase authentication is enabled.
 
 ## Status
 

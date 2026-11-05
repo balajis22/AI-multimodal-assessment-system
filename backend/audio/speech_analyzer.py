@@ -5,8 +5,8 @@ import tempfile
 import librosa
 import numpy as np
 import tensorflow_hub as hub
-from faster_whisper import WhisperModel
 from scipy.io.wavfile import write
+from backend.services.ai_service_client import transcribe_file
 
 
 SAMPLE_RATE = 16000
@@ -17,21 +17,9 @@ with open(class_map, encoding="utf-8") as class_file:
     labels = [line.strip().split(",")[2] for line in class_file.readlines()[1:]]
 print("YAMNet loaded.")
 
-whisper_model = None
-
-
-def _transcribe_file(filename):
-    global whisper_model
-    if whisper_model is None:
-        print("Loading CPU Whisper model...")
-        whisper_model = WhisperModel("base", device="cpu", compute_type="int8")
-    segments, _ = whisper_model.transcribe(filename, beam_size=5)
-    return " ".join(segment.text.strip() for segment in segments).strip()
-
-
 def record_and_transcribe(seconds=10, filename="sample.wav"):
     """Transcribe a WAV file already captured by the browser."""
-    return _transcribe_file(filename)
+    return transcribe_file(filename)
 
 
 def analyze_speech_audio(audio_data, sample_rate=SAMPLE_RATE):
@@ -55,7 +43,7 @@ def analyze_speech_audio(audio_data, sample_rate=SAMPLE_RATE):
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
             temp_path = temp_file.name
         write(temp_path, SAMPLE_RATE, audio_int16)
-        transcript = _transcribe_file(temp_path)
+        transcript = transcribe_file(temp_path)
     finally:
         if temp_path and os.path.exists(temp_path):
             os.remove(temp_path)
