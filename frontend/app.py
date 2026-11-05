@@ -51,24 +51,38 @@ class BrowserMediaBuffer:
     def __init__(self):
         self.lock = threading.Lock()
         self.recording = threading.Event()
+        self.audio_chunks = []
         self.video_frames = []
         self.video_frame_count = 0
         self.start_time = 0.0
         self.emotion = "No Face"
         self.eye = "No Face"
         self.head = "No Face"
+        self.audio_peak = 0.0
         self.duration = 0
 
     def begin(self, duration):
         with self.lock:
+            self.audio_chunks.clear()
             self.video_frames.clear()
             self.video_frame_count = 0
             self.start_time = time.monotonic()
             self.emotion = "No Face"
             self.eye = "No Face"
             self.head = "No Face"
+            self.audio_peak = 0.0
             self.duration = duration
         self.recording.set()
+
+    def add_audio(self, samples):
+        if not self.recording.is_set():
+            return
+        with self.lock:
+            if self.recording.is_set():
+                clean = np.asarray(samples, dtype=np.float32).reshape(-1)
+                if clean.size:
+                    self.audio_peak = max(self.audio_peak, float(np.max(np.abs(clean))))
+                    self.audio_chunks.append(clean.copy())
 
     def add_video(self, frame):
         if not self.recording.is_set():
@@ -81,8 +95,9 @@ class BrowserMediaBuffer:
     def finish(self):
         self.recording.clear()
         with self.lock:
+            audio = np.concatenate(self.audio_chunks) if self.audio_chunks else np.array([], dtype=np.float32)
             frames = list(self.video_frames)
-        return frames
+        return audio, frames
 
 # --------------------------------------------------
 # Page Configuration
@@ -731,7 +746,8 @@ elif st.session_state.current_page == "interview":
         if "browser_media_buffer" not in st.session_state:
             st.session_state.browser_media_buffer = BrowserMediaBuffer()
         media_buffer = st.session_state.browser_media_buffer
-        st.caption("Start the camera in the player. Record your answer with the browser recorder below.")
+        audio_resampler = av.AudioResampler(format="s16", layout="mono", rate=16000)
+        st.caption("Start the camera and microphone in the player, allow browser access, then start the timed interview.")
 
         def capture_video(frame):
             image = frame.to_ndarray(format="bgr24")
@@ -766,20 +782,26 @@ elif st.session_state.current_page == "interview":
             output_frame.time_base = frame.time_base
             return output_frame
 
+        def capture_audio(frame):
+            if media_buffer.recording.is_set():
+                for converted in audio_resampler.resample(frame):
+                    raw = converted.to_ndarray()
+                    if np.issubdtype(raw.dtype, np.integer):
+                        scale = float(max(abs(np.iinfo(raw.dtype).min), np.iinfo(raw.dtype).max))
+                        samples = raw.reshape(-1).astype(np.float32) / scale
+                    else:
+                        samples = raw.reshape(-1).astype(np.float32)
+                    media_buffer.add_audio(samples)
+            return frame
+
         rtc_context = webrtc_streamer(
             key="interview-browser-media",
             mode=WebRtcMode.SENDRECV,
             video_frame_callback=capture_video,
-            media_stream_constraints={"video": True, "audio": False},
+            audio_frame_callback=capture_audio,
+            media_stream_constraints={"video": True, "audio": True},
             sendback_audio=False,
             rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
-        )
-
-        st.caption("To get a reliable transcript, record and stop your answer here, then click Start Interview Session. Whisper analyzes this browser recording.")
-        audio_upload = st.audio_input(
-            "Record your spoken answer",
-            sample_rate=16000,
-            key=f"answer-audio-{st.session_state.question_idx}",
         )
 
         st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
@@ -789,8 +811,8 @@ elif st.session_state.current_page == "interview":
             start_btn = st.button("▶ Start Interview Session", use_container_width=True)
 
             if start_btn:
-                if not rtc_context.state.playing and audio_upload is None:
-                    st.warning("Start the camera player or record your answer in the browser recorder below.")
+                if not rtc_context.state.playing:
+                    st.warning("Start the camera and microphone in the video panel first, then allow browser access.")
                 else:
                     service = get_interview_service()
                     if service is None:
@@ -798,20 +820,16 @@ elif st.session_state.current_page == "interview":
                     import backend.audio.speech_analyzer as speech_module
                     import backend.vision.interview_analyzer as vision_module
 
-                    if rtc_context.state.playing:
-                        media_buffer.begin(st.session_state.duration)
-                    with st.spinner(f"Analyzing your answer and capturing the camera for {st.session_state.duration} seconds..."):
+                    media_buffer.begin(st.session_state.duration)
+                    with st.spinner(f"Recording camera and microphone for {st.session_state.duration} seconds, then analyzing..."):
                         try:
-                            if rtc_context.state.playing:
-                                time.sleep(st.session_state.duration)
-                                video_frames = media_buffer.finish()
-                            else:
-                                video_frames = []
-                            if audio_upload is not None:
-                                speech_result = speech_module.analyze_speech_wav(audio_upload.getvalue())
-                            else:
-                                speech_result = speech_module.analyze_speech_audio(np.array([], dtype=np.float32), sample_rate=16000)
-                                st.warning("Record your answer with the browser recorder below before starting the session.")
+                            time.sleep(st.session_state.duration)
+                            audio_samples, video_frames = media_buffer.finish()
+                            if audio_samples.size == 0:
+                                st.warning("The microphone sent no audio. Check Chrome's microphone permission and selected input, then try again.")
+                            elif media_buffer.audio_peak < 0.002:
+                                st.warning("The microphone recording is nearly silent. Check the selected microphone and speak closer to it.")
+                            speech_result = speech_module.analyze_speech_audio(audio_samples, sample_rate=16000)
                             vision_result = vision_module.analyze_interview_frames(video_frames)
                             result = service.run(
                                 duration=st.session_state.duration,
@@ -883,7 +901,7 @@ elif st.session_state.current_page == "interview":
                 </div>
                 <span class="badge badge-green">Browser Media</span>
             </div>
-            <div style="font-size: 0.76rem; color: #a1a1aa;">Browser WAV recorder · OpenAI Whisper base</div>
+            <div style="font-size: 0.76rem; color: #a1a1aa;">Browser microphone · faster-whisper</div>
         </div>
 
         <!-- AI Engine -->
