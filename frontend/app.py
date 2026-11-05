@@ -614,11 +614,11 @@ if st.session_state.current_page == "home":
         - 👁️ **Computer Vision Analysis**  
           Tracks real-time facial expressions, gaze alignment, head rotation, and eye contact consistency using 468 landmark points.
 
-        - 🎙️ **Acoustics & Whisper Speech-to-Text**  
-          Measures speaking tempo (WPM), hesitation, filler words (um, uh, like), and classifies ambient background noise.
+        - 🎙️ **Audio Analysis**
+          Classifies ambient background noise. Speech transcription is disabled in this deployment.
 
-        - 🧠 **Semantic NLP & Knowledge Matching**  
-          Compares your answer semantically against domain concepts using dense vector embeddings and cosine similarity.
+        - 🧠 **Keyword & Knowledge Matching**
+          Checks for expected concepts using lightweight keyword matching.
 
         > ⚡ **Hardware Readiness**  
         In the next screen, you will enter the Live Camera Room where your webcam and microphone telemetry are monitored before launching the assessment.
@@ -1022,7 +1022,7 @@ elif st.session_state.current_page == "results":
                 st.markdown("""
                 <div class="glass-panel">
                     <div style="font-family: 'Outfit', sans-serif; font-size: 1.05rem; font-weight: 700; margin-bottom: 0.8rem; color: #ffffff;">
-                        📝 Verbatim Whisper Transcript
+                        📝 Speech Transcript
                     </div>
                 """, unsafe_allow_html=True)
                 transcript = res.get("transcript", "")
@@ -1035,7 +1035,7 @@ elif st.session_state.current_page == "results":
                 else:
                     st.markdown("""
                     <div class="transcript-bubble" style="color: #a1a1aa; font-style: italic;">
-                        No audio speech detected or transcribed during the window.
+                        Speech transcription is disabled in this deployment.
                     </div>
                     """, unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)

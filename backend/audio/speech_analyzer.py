@@ -1,4 +1,3 @@
-import whisper
 import tensorflow_hub as hub
 import librosa
 import numpy as np
@@ -11,9 +10,6 @@ from scipy.io.wavfile import write
 # --------------------------------------------------
 # Load models ONCE
 # --------------------------------------------------
-
-print("Loading Whisper...")
-whisper_model = whisper.load_model("base")
 
 print("Loading YAMNet...")
 yamnet = hub.load("https://tfhub.dev/google/yamnet/1")
@@ -72,11 +68,10 @@ def record_and_transcribe(
     # Whisper transcription
     # ----------------------------------------------
 
-    result = whisper_model.transcribe(
-        filename
-    )
-
-    transcript = result["text"].strip()
+    # Whisper is disabled in this single-container deployment to avoid loading
+    # PyTorch alongside TensorFlow. The transcript remains empty until speech
+    # recognition is moved to a separate service.
+    transcript = ""
 
     return transcript
 
@@ -114,14 +109,9 @@ def analyze_speech(seconds=10, start_event=None):
 
     print("Recording complete!")
 
-    # Convert in-memory int16 audio to normalized float32 for Whisper (no ffmpeg needed)
-    audio_float = recording.flatten().astype(np.float32) / 32768.0
-
-    result = whisper_model.transcribe(
-        audio_float
-    )
-
-    transcript = result["text"]
+    # Whisper is disabled in this single-container deployment to avoid loading
+    # PyTorch alongside TensorFlow.
+    transcript = ""
 
     # ----------------------------------------------
     # Fillers

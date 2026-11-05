@@ -1,6 +1,4 @@
 # Deep Learning & Vision
---extra-index-url https://download.pytorch.org/whl/cpu
-# torch==2.14.1+cpu
 tensorflow==2.21.0
 tf-keras==2.21.0
 opencv-contrib-python-headless
@@ -17,12 +15,7 @@ matplotlib
 # Audio Processing & Speech Recognition
 sounddevice
 librosa
-# openai-whisper
 tensorflow-hub==0.16.1
-
-# NLP & Semantic Analysis
-# sentence-transformers
-
 # Web Application
 streamlit
 requests
