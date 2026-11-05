@@ -3,7 +3,7 @@
 torch==2.14.1+cpu
 tensorflow==2.21.0
 tf-keras==2.21.0
-opencv-contrib-python
+opencv-contrib-python-headless
 mediapipe
 cvzone
 pillow
