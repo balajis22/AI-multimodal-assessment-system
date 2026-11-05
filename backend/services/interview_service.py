@@ -125,24 +125,42 @@ class InterviewService:
 
         transcript = self.speech_result.get("transcript", "")
 
-        try:
-            self.answer_result = evaluate_answer(
-                question,
-                transcript,
-                expected_concepts
-            )
-        except Exception as e:
-            print(f"Evaluation error: {e}")
-            self.answer_result = None
-
-        if not self.answer_result or not isinstance(self.answer_result, dict):
+        if not transcript.strip():
+            self.speech_result["speech_score"] = 0
+            self.speech_result["wpm"] = 0
+            self.speech_result["total_fillers"] = 0
             self.answer_result = {
-                "semantic_score": 70,
-                "concept_coverage": 70,
-                "concept_scores": {c["name"]: 70 for c in expected_concepts} if expected_concepts else {},
-                "answer_score": 70,
-                "feedback": "Answer evaluated successfully."
+                "semantic_score": 0,
+                "concept_coverage": 0,
+                "concept_scores": {c["name"]: 0 for c in expected_concepts} if expected_concepts else {},
+                "answer_score": 0,
+                "feedback": "No answer was detected. Speak during the recording to receive an answer score.",
             }
+        else:
+            try:
+                self.answer_result = evaluate_answer(
+                    question,
+                    transcript,
+                    expected_concepts
+                )
+            except Exception as e:
+                print(f"Evaluation error: {e}")
+                self.answer_result = {
+                    "semantic_score": 0,
+                    "concept_coverage": 0,
+                    "concept_scores": {c["name"]: 0 for c in expected_concepts} if expected_concepts else {},
+                    "answer_score": 0,
+                    "feedback": "Answer evaluation service was unavailable; no answer score was assigned.",
+                }
+
+            if not self.answer_result or not isinstance(self.answer_result, dict):
+                self.answer_result = {
+                    "semantic_score": 0,
+                    "concept_coverage": 0,
+                    "concept_scores": {c["name"]: 0 for c in expected_concepts} if expected_concepts else {},
+                    "answer_score": 0,
+                    "feedback": "Answer could not be evaluated; no answer score was assigned.",
+                }
 
         # --------------------------------------------------
         # Traditional Interview Scoring
@@ -194,7 +212,7 @@ class InterviewService:
             recommendations.append("Slow down your speaking pace.")
 
         # Add answer feedback
-        if self.answer_result.get("answer_score", 70) < 60:
+        if self.answer_result.get("answer_score", 0) < 60:
             recommendations.append(self.answer_result.get("feedback", "Review core technical concepts."))
 
         if len(recommendations) == 0:
@@ -224,9 +242,9 @@ class InterviewService:
             "fillers": self.speech_result.get("total_fillers", 0),
 
             # Answer Evaluation
-            "semantic_score": self.answer_result.get("semantic_score", 70),
-            "concept_coverage": self.answer_result.get("concept_coverage", 70),
-            "answer_score": self.answer_result.get("answer_score", 70),
+            "semantic_score": self.answer_result.get("semantic_score", 0),
+            "concept_coverage": self.answer_result.get("concept_coverage", 0),
+            "answer_score": self.answer_result.get("answer_score", 0),
             "answer_feedback": self.answer_result.get("feedback", "Answer evaluated successfully."),
             "concept_scores": self.answer_result.get("concept_scores", {}),
 
