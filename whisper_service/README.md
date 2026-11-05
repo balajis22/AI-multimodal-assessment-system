@@ -1,8 +1,8 @@
 # Separate Whisper and NLP backend
 
-Deploy this folder as a Docker web service on a host that supports Docker (for example, Render or Google Cloud Run).
+Deploy this folder as a Docker web service on a host that supports Docker (for example, Render or Google Cloud Run). For Render, use the repository root as the Docker build context.
 
-1. Set the service's Dockerfile path to `whisper_service/Dockerfile` (build context: repository root) or deploy `whisper_service` as the service root.
+1. Set the service's Dockerfile path to `whisper_service/Dockerfile` and leave the root directory blank so the repository root is the build context.
 2. Add a long random secret environment variable named `AI_SERVICE_TOKEN`.
 3. Deploy and wait for the service to become healthy. Its health URL is `/health`.
 4. In Streamlit Cloud, add these keys under **App settings → Secrets**:
