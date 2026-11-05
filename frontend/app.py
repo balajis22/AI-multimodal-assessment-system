@@ -54,12 +54,24 @@ class BrowserMediaBuffer:
         self.audio_chunks = []
         self.video_frames = []
         self.video_frame_count = 0
+        self.start_time = 0.0
+        self.emotion = "No Face"
+        self.eye = "No Face"
+        self.head = "No Face"
+        self.audio_peak = 0.0
+        self.duration = 0
 
-    def begin(self):
+    def begin(self, duration):
         with self.lock:
             self.audio_chunks.clear()
             self.video_frames.clear()
             self.video_frame_count = 0
+            self.start_time = time.monotonic()
+            self.emotion = "No Face"
+            self.eye = "No Face"
+            self.head = "No Face"
+            self.audio_peak = 0.0
+            self.duration = duration
         self.recording.set()
 
     def add_audio(self, samples):
@@ -67,7 +79,10 @@ class BrowserMediaBuffer:
             return
         with self.lock:
             if self.recording.is_set():
-                self.audio_chunks.append(samples.copy())
+                clean = np.asarray(samples, dtype=np.float32).reshape(-1)
+                if clean.size:
+                    self.audio_peak = max(self.audio_peak, float(np.max(np.abs(clean))))
+                    self.audio_chunks.append(clean.copy())
 
     def add_video(self, frame):
         if not self.recording.is_set():
@@ -75,9 +90,7 @@ class BrowserMediaBuffer:
         with self.lock:
             if not self.recording.is_set():
                 return
-            self.video_frame_count += 1
-            if self.video_frame_count % 30 == 0:
-                self.video_frames.append(frame.copy())
+            self.video_frames.append(frame.copy())
 
     def finish(self):
         self.recording.clear()
@@ -692,7 +705,7 @@ elif st.session_state.current_page == "interview":
         st.markdown(" ".join(f"**{concept['name']}**" for concept in q_concepts))
 
     # 2-Column Cockpit Layout
-    cam_col, tel_col = st.columns([1.1, 0.9], gap="large")
+    cam_col, tel_col = st.columns([1.45, 0.65], gap="large")
 
     with cam_col:
         st.markdown("### 📷 Vision & Facial Recognition Viewport")
@@ -737,15 +750,47 @@ elif st.session_state.current_page == "interview":
         st.caption("Start the camera and microphone in the player, allow browser access, then start the timed interview.")
 
         def capture_video(frame):
+            image = frame.to_ndarray(format="bgr24")
             if media_buffer.recording.is_set():
-                image = frame.to_ndarray(format="bgr24")
-                media_buffer.add_video(cv2.resize(image, (640, 480)))
-            return frame
+                media_buffer.video_frame_count += 1
+                if media_buffer.video_frame_count % 30 == 0:
+                    media_buffer.add_video(cv2.resize(image, (640, 480)))
+                    try:
+                        from backend.vision.emotion_detector import detect_emotion
+                        from backend.vision.eye_contact import detect_eye_contact
+                        from backend.vision.head_pose import detect_head_pose
+                        media_buffer.emotion, _, _ = detect_emotion(image)
+                        media_buffer.eye = detect_eye_contact(image)
+                        media_buffer.head = detect_head_pose(image)
+                    except Exception:
+                        pass
+
+            left, top = 18, 32
+            overlay_lines = [
+                (f"Emotion: {media_buffer.emotion}", (0, 255, 0)),
+                (f"Eye: {media_buffer.eye}", (255, 255, 0)),
+                (f"Head: {media_buffer.head}", (0, 200, 255)),
+            ]
+            if media_buffer.recording.is_set():
+                remaining = max(0, int(media_buffer.duration - (time.monotonic() - media_buffer.start_time)))
+                overlay_lines.append((f"Time Left: {remaining}s", (255, 255, 255)))
+            cv2.rectangle(image, (8, 8), (300, 160 if len(overlay_lines) > 3 else 125), (15, 15, 18), -1)
+            for index, (label, color) in enumerate(overlay_lines):
+                cv2.putText(image, label, (left, top + index * 34), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2, cv2.LINE_AA)
+            output_frame = av.VideoFrame.from_ndarray(image, format="bgr24")
+            output_frame.pts = frame.pts
+            output_frame.time_base = frame.time_base
+            return output_frame
 
         def capture_audio(frame):
             if media_buffer.recording.is_set():
                 for converted in audio_resampler.resample(frame):
-                    samples = converted.to_ndarray().reshape(-1).astype(np.float32) / 32768.0
+                    raw = converted.to_ndarray()
+                    if np.issubdtype(raw.dtype, np.integer):
+                        scale = float(max(abs(np.iinfo(raw.dtype).min), np.iinfo(raw.dtype).max))
+                        samples = raw.reshape(-1).astype(np.float32) / scale
+                    else:
+                        samples = raw.reshape(-1).astype(np.float32)
                     media_buffer.add_audio(samples)
             return frame
 
@@ -775,11 +820,15 @@ elif st.session_state.current_page == "interview":
                     import backend.audio.speech_analyzer as speech_module
                     import backend.vision.interview_analyzer as vision_module
 
-                    media_buffer.begin()
+                    media_buffer.begin(st.session_state.duration)
                     with st.spinner(f"Recording camera and microphone for {st.session_state.duration} seconds, then analyzing..."):
                         try:
                             time.sleep(st.session_state.duration)
                             audio_samples, video_frames = media_buffer.finish()
+                            if audio_samples.size == 0:
+                                st.warning("The microphone sent no audio. Check Chrome's microphone permission and selected input, then try again.")
+                            elif media_buffer.audio_peak < 0.002:
+                                st.warning("The microphone recording is nearly silent. Check the selected microphone and speak closer to it.")
                             speech_result = speech_module.analyze_speech_audio(audio_samples, sample_rate=16000)
                             vision_result = vision_module.analyze_interview_frames(video_frames)
                             result = service.run(
@@ -1115,11 +1164,18 @@ elif st.session_state.current_page == "results":
                     </div>
                     """, unsafe_allow_html=True)
                 else:
+                    audio_rms = float(res.get("audio_rms", 0) or 0)
+                    recorded_seconds = float(res.get("recorded_seconds", 0) or 0)
+                    empty_message = (
+                        "No microphone audio reached the app. Check Chrome microphone access and your selected input."
+                        if recorded_seconds <= 0 or audio_rms < 0.002
+                        else "Whisper could not recognize speech in the captured audio. Try speaking clearly and closer to the microphone."
+                    )
                     st.markdown("""
                     <div class="transcript-bubble" style="color: #a1a1aa; font-style: italic;">
-                        No speech was transcribed from the recording.
+                        {empty_message}
                     </div>
-                    """, unsafe_allow_html=True)
+                    """.format(empty_message=empty_message), unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
 
         # Tab 3: Visual & Posture

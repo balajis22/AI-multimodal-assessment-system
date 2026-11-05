@@ -216,6 +216,9 @@ class InterviewService:
             # Speech
             "speech_score": self.speech_result.get("speech_score", 75),
             "transcript": transcript,
+            "recorded_seconds": self.speech_result.get("recorded_seconds", 0),
+            "speech_seconds": self.speech_result.get("speech_seconds", 0),
+            "audio_rms": self.speech_result.get("audio_rms", 0),
             "background": self.speech_result.get("background", "Clear"),
             "wpm": self.speech_result.get("wpm", 0),
             "fillers": self.speech_result.get("total_fillers", 0),

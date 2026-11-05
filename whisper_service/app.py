@@ -47,7 +47,13 @@ async def transcribe(file: UploadFile = File(...), authorization: str = Header(d
             while chunk := await file.read(1024 * 1024):
                 temp_file.write(chunk)
         result = _whisper_model().transcribe(temp_path, fp16=False)
-        return {"transcript": result.get("text", "").strip()}
+        transcript = result.get("text", "").strip()
+        speech_seconds = sum(
+            max(0.0, float(segment.get("end", 0)) - float(segment.get("start", 0)))
+            for segment in result.get("segments", [])
+            if str(segment.get("text", "")).strip()
+        )
+        return {"transcript": transcript, "speech_seconds": speech_seconds}
     finally:
         if temp_path and os.path.exists(temp_path):
             os.remove(temp_path)

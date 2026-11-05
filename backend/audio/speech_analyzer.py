@@ -6,7 +6,7 @@ import librosa
 import numpy as np
 import tensorflow_hub as hub
 from scipy.io.wavfile import write
-from backend.services.ai_service_client import transcribe_file
+from backend.services.ai_service_client import transcribe_audio_file
 
 
 SAMPLE_RATE = 16000
@@ -19,7 +19,7 @@ print("YAMNet loaded.")
 
 def record_and_transcribe(seconds=10, filename="sample.wav"):
     """Transcribe a WAV file already captured by the browser."""
-    return transcribe_file(filename)
+    return transcribe_audio_file(filename).get("transcript", "").strip()
 
 
 def analyze_speech_audio(audio_data, sample_rate=SAMPLE_RATE):
@@ -34,7 +34,8 @@ def analyze_speech_audio(audio_data, sample_rate=SAMPLE_RATE):
             "transcript": "", "fillers": {}, "total_fillers": 0,
             "word_count": 0, "wpm": 0, "background": "Clear",
             "background_confidence": 1.0, "background_natural": True,
-            "speech_score": 75,
+            "speech_score": 75, "recorded_seconds": round(duration, 1),
+            "speech_seconds": 0, "audio_rms": 0.0,
         }
 
     audio_int16 = np.clip(waveform * 32767, -32768, 32767).astype(np.int16)
@@ -43,7 +44,9 @@ def analyze_speech_audio(audio_data, sample_rate=SAMPLE_RATE):
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
             temp_path = temp_file.name
         write(temp_path, SAMPLE_RATE, audio_int16)
-        transcript = transcribe_file(temp_path)
+        transcription = transcribe_audio_file(temp_path)
+        transcript = transcription.get("transcript", "").strip()
+        speech_duration = float(transcription.get("speech_seconds", 0) or 0)
     finally:
         if temp_path and os.path.exists(temp_path):
             os.remove(temp_path)
@@ -56,7 +59,8 @@ def analyze_speech_audio(audio_data, sample_rate=SAMPLE_RATE):
     }
     total_fillers = sum(filler_counts.values())
     word_count = len(text.split())
-    wpm = round(word_count / (duration / 60))
+    speech_duration = min(duration, speech_duration) if speech_duration > 0 else duration
+    wpm = round(word_count / (speech_duration / 60)) if speech_duration > 0 and word_count else 0
 
     scores, _, _ = yamnet(waveform)
     mean_scores = np.mean(scores.numpy(), axis=0)
@@ -79,6 +83,9 @@ def analyze_speech_audio(audio_data, sample_rate=SAMPLE_RATE):
         "background_confidence": confidence,
         "background_natural": natural,
         "speech_score": speech_score,
+        "recorded_seconds": round(duration, 1),
+        "speech_seconds": round(speech_duration, 1),
+        "audio_rms": float(np.sqrt(np.mean(np.square(waveform)))) if waveform.size else 0.0,
     }
 
 

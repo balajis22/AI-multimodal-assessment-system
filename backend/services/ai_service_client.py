@@ -34,13 +34,17 @@ def _post(path, **kwargs):
     return response.json()
 
 
-def transcribe_file(filename):
+def transcribe_audio_file(filename):
     with open(filename, "rb") as audio_file:
-        result = _post(
+        return _post(
             "/transcribe",
             files={"file": (os.path.basename(filename), audio_file, "audio/wav")},
         )
-    return result["transcript"]
+
+
+def transcribe_file(filename):
+    """Compatibility wrapper for callers that only need the transcript text."""
+    return transcribe_audio_file(filename)["transcript"]
 
 
 def evaluate_answer(question, answer, expected_concepts):
