@@ -14,7 +14,7 @@ def evaluate_answer(question, answer, expected_concepts):
             "concept_coverage": 0,
             "concept_scores": {},
             "answer_score": 0,
-            "feedback": "No answer was transcribed. Speech transcription is disabled in this deployment.",
+            "feedback": "No answer was transcribed from the browser microphone.",
         }
 
     answer_lower = answer.lower()

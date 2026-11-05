@@ -162,6 +162,30 @@ def analyze_interview(duration=20, start_event=None, frame_callback=None):
     }
 
 
+def analyze_interview_frames(frames):
+    """Analyze sampled browser camera frames without opening a server webcam."""
+    emotions = []
+    eyes = []
+    heads = []
+    for frame in frames:
+        emotion, _, _ = detect_emotion(frame)
+        eye = detect_eye_contact(frame)
+        head = detect_head_pose(frame)
+        if emotion != "No Face":
+            emotions.append(emotion)
+        if eye != "No Face":
+            eyes.append(eye)
+        if head != "No Face":
+            heads.append(head)
+    if not emotions:
+        return {"emotion": "No Face", "eye": "No Face", "head": "No Face"}
+    return {
+        "emotion": Counter(emotions).most_common(1)[0][0],
+        "eye": Counter(eyes).most_common(1)[0][0] if eyes else "No Face",
+        "head": Counter(heads).most_common(1)[0][0] if heads else "No Face",
+    }
+
+
 if __name__ == "__main__":
 
     result = analyze_interview(duration=20)

@@ -13,8 +13,9 @@ scikit-learn
 matplotlib
 
 # Audio Processing & Speech Recognition
-sounddevice
 librosa
+faster-whisper==1.2.1
+streamlit-webrtc
 tensorflow-hub==0.16.1
 # Web Application
 streamlit
