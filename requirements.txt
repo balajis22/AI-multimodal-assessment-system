@@ -1,7 +1,9 @@
 # Deep Learning & Vision
-tensorflow==2.21.0
-tf-keras==2.21.0
-opencv-contrib-python-headless
+# Use CPU PyTorch on Streamlit Cloud to avoid downloading GPU/CUDA packages.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.14.1+cpu
+tensorflow
+opencv-contrib-python
 mediapipe
 cvzone
 pillow
@@ -13,11 +15,17 @@ scikit-learn
 matplotlib
 
 # Audio Processing & Speech Recognition
+sounddevice
 librosa
-streamlit-webrtc
-tensorflow-hub==0.16.1
+openai-whisper
+tensorflow-hub
+
+# NLP & Semantic Analysis
+sentence-transformers
+
 # Web Application
 streamlit
 requests
 
+# Downgrade if u have updated one
 setuptools<=80.10.2

@@ -1,98 +1,281 @@
-import os
-import re
-import tempfile
-
+import whisper
+import tensorflow_hub as hub
 import librosa
 import numpy as np
-import tensorflow_hub as hub
+import sounddevice as sd
+import re
+
 from scipy.io.wavfile import write
-from backend.services.ai_service_client import transcribe_audio_file
 
 
-SAMPLE_RATE = 16000
+# --------------------------------------------------
+# Load models ONCE
+# --------------------------------------------------
+
+print("Loading Whisper...")
+whisper_model = whisper.load_model("base")
+
 print("Loading YAMNet...")
 yamnet = hub.load("https://tfhub.dev/google/yamnet/1")
+
 class_map = yamnet.class_map_path().numpy().decode("utf-8")
-with open(class_map, encoding="utf-8") as class_file:
-    labels = [line.strip().split(",")[2] for line in class_file.readlines()[1:]]
-print("YAMNet loaded.")
 
-def record_and_transcribe(seconds=10, filename="sample.wav"):
-    """Transcribe a WAV file already captured by the browser."""
-    return transcribe_audio_file(filename).get("transcript", "").strip()
+with open(class_map) as f:
+    labels = [
+        line.strip().split(",")[2]
+        for line in f.readlines()[1:]
+    ]
+
+print("Audio models loaded successfully!\n")
 
 
-def analyze_speech_audio(audio_data, sample_rate=SAMPLE_RATE):
-    """Transcribe browser microphone audio and calculate speech/audio metrics."""
-    waveform = np.asarray(audio_data, dtype=np.float32).reshape(-1)
-    if sample_rate != SAMPLE_RATE and waveform.size:
-        waveform = librosa.resample(waveform, orig_sr=sample_rate, target_sr=SAMPLE_RATE)
+# --------------------------------------------------
+# Record + Transcribe
+# --------------------------------------------------
 
-    duration = waveform.size / SAMPLE_RATE if waveform.size else 0
-    if duration <= 0.25:
-        return {
-            "transcript": "", "fillers": {}, "total_fillers": 0,
-            "word_count": 0, "wpm": 0, "background": "Clear",
-            "background_confidence": 1.0, "background_natural": True,
-            "speech_score": 75, "recorded_seconds": round(duration, 1),
-            "speech_seconds": 0, "audio_rms": 0.0,
-        }
+def record_and_transcribe(
+    seconds=10,
+    filename="sample.wav"
+):
+    """
+    Record the candidate's answer and convert
+    the speech into text using Whisper.
 
-    audio_int16 = np.clip(waveform * 32767, -32768, 32767).astype(np.int16)
-    temp_path = None
-    try:
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
-            temp_path = temp_file.name
-        write(temp_path, SAMPLE_RATE, audio_int16)
-        transcription = transcribe_audio_file(temp_path)
-        transcript = transcription.get("transcript", "").strip()
-        speech_duration = float(transcription.get("speech_seconds", 0) or 0)
-    finally:
-        if temp_path and os.path.exists(temp_path):
-            os.remove(temp_path)
+    Returns:
+        transcript
+    """
 
-    text = transcript.lower()
-    fillers = ["um", "uh", "like", "actually", "basically", "you know", "sort of", "kind of", "so"]
-    filler_counts = {
-        filler: len(re.findall(r"\b" + re.escape(filler) + r"\b", text))
-        for filler in fillers
-    }
-    total_fillers = sum(filler_counts.values())
-    word_count = len(text.split())
-    speech_duration = min(duration, speech_duration) if speech_duration > 0 else duration
-    wpm = round(word_count / (speech_duration / 60)) if speech_duration > 0 and word_count else 0
+    fs = 16000
 
-    scores, _, _ = yamnet(waveform)
-    mean_scores = np.mean(scores.numpy(), axis=0)
-    index = int(np.argmax(mean_scores))
-    sound = labels[index]
-    confidence = float(mean_scores[index])
-    natural = any(
-        term.lower() in sound.lower()
-        for term in ["Rain", "Thunder", "Wind", "Water", "Ocean", "Bird", "Stream"]
+    
+
+    print("Speak now...")
+
+    recording = sd.rec(
+        int(seconds * fs),
+        samplerate=fs,
+        channels=1,
+        dtype="int16"
     )
 
-    speech_score = max(0, 100 - total_fillers * 3 - (10 if wpm < 90 or wpm > 170 else 0))
+    sd.wait()
+
+    write(
+        filename,
+        fs,
+        recording
+    )
+
+    print("Recording complete!")
+
+    # ----------------------------------------------
+    # Whisper transcription
+    # ----------------------------------------------
+
+    result = whisper_model.transcribe(
+        filename
+    )
+
+    transcript = result["text"].strip()
+
+    return transcript
+
+
+# --------------------------------------------------
+# Full Speech Analysis
+# --------------------------------------------------
+
+def analyze_speech(seconds=10, start_event=None):
+
+    fs = 16000
+
+   
+
+   
+    if start_event is not None:
+        start_event.wait()
+
+    print("Speak now...")
+
+    recording = sd.rec(
+        int(seconds * fs),
+        samplerate=fs,
+        channels=1,
+        dtype="int16"
+    )
+
+    sd.wait()
+
+    write(
+        "sample.wav",
+        fs,
+        recording
+    )
+
+    print("Recording complete!")
+
+    # Convert in-memory int16 audio to normalized float32 for Whisper (no ffmpeg needed)
+    audio_float = recording.flatten().astype(np.float32) / 32768.0
+
+    result = whisper_model.transcribe(
+        audio_float
+    )
+
+    transcript = result["text"]
+
+    # ----------------------------------------------
+    # Fillers
+    # ----------------------------------------------
+
+    fillers = [
+        "um",
+        "uh",
+        "like",
+        "actually",
+        "basically",
+        "you know",
+        "sort of",
+        "kind of",
+        "so"
+    ]
+
+    text = transcript.lower()
+
+    total_fillers = 0
+
+    filler_counts = {}
+
+    for filler in fillers:
+
+        count = len(
+            re.findall(
+                r"\b"
+                + re.escape(filler)
+                + r"\b",
+                text
+            )
+        )
+
+        filler_counts[filler] = count
+
+        total_fillers += count
+
+    # ----------------------------------------------
+    # WPM
+    # ----------------------------------------------
+
+    word_count = len(
+        text.split()
+    )
+
+    wpm = round(
+        word_count / (seconds / 60)
+    )
+
+    # ----------------------------------------------
+    # Sound Classification
+    # ----------------------------------------------
+
+    waveform, sr = librosa.load(
+        "sample.wav",
+        sr=16000
+    )
+
+    scores, embeddings, spectrogram = yamnet(
+        waveform
+    )
+
+    scores = scores.numpy()
+
+    mean_scores = np.mean(
+        scores,
+        axis=0
+    )
+
+    idx = np.argmax(
+        mean_scores
+    )
+
+    sound = labels[idx]
+
+    confidence = float(
+        mean_scores[idx]
+    )
+
+    NATURAL = [
+        "Rain",
+        "Thunder",
+        "Wind",
+        "Water",
+        "Ocean",
+        "Bird",
+        "Stream"
+    ]
+
+    natural = any(
+        x.lower() in sound.lower()
+        for x in NATURAL
+    )
+
+    # ----------------------------------------------
+    # Speech Score
+    # ----------------------------------------------
+
+    speech_score = 100
+
+    speech_score -= (
+        total_fillers * 3
+    )
+
+    if wpm < 90:
+
+        speech_score -= 10
+
+    elif wpm > 170:
+
+        speech_score -= 10
+
+    speech_score = max(
+        0,
+        speech_score
+    )
+
+    # ----------------------------------------------
+    # Return Everything
+    # ----------------------------------------------
+
     return {
+
         "transcript": transcript,
+
         "fillers": filler_counts,
+
         "total_fillers": total_fillers,
+
         "word_count": word_count,
+
         "wpm": wpm,
+
         "background": sound,
+
         "background_confidence": confidence,
+
         "background_natural": natural,
-        "speech_score": speech_score,
-        "recorded_seconds": round(duration, 1),
-        "speech_seconds": round(speech_duration, 1),
-        "audio_rms": float(np.sqrt(np.mean(np.square(waveform)))) if waveform.size else 0.0,
+
+        "speech_score": speech_score
     }
 
 
-def analyze_speech(seconds=10, start_event=None, audio_data=None, sample_rate=SAMPLE_RATE):
-    """Keep the previous API; cloud calls must supply browser-captured audio_data."""
-    if start_event is not None:
-        start_event.wait()
-    if audio_data is None:
-        return analyze_speech_audio(np.array([], dtype=np.float32), sample_rate)
-    return analyze_speech_audio(audio_data, sample_rate)
+# --------------------------------------------------
+# Test
+# --------------------------------------------------
+
+if __name__ == "__main__":
+
+    transcript = record_and_transcribe(
+        seconds=10
+    )
+
+    print("\n========== TRANSCRIPT ==========\n")
+
+    print(transcript)

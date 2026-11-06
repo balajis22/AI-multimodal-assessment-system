@@ -1,13 +1,8 @@
 import sys
 import time
-import threading
 from pathlib import Path
 
-import av
-import cv2
-import numpy as np
 import streamlit as st
-from streamlit_webrtc import WebRtcMode, webrtc_streamer
 
 # --------------------------------------------------
 # Ensure the app can be run both as a standalone module and as a package entry
@@ -43,61 +38,6 @@ def get_interview_service():
         )
         st.caption(f"Details: {exc}")
         return None
-
-
-class BrowserMediaBuffer:
-    """Thread-safe browser camera and microphone capture for one Streamlit session."""
-
-    def __init__(self):
-        self.lock = threading.Lock()
-        self.recording = threading.Event()
-        self.audio_chunks = []
-        self.video_frames = []
-        self.video_frame_count = 0
-        self.start_time = 0.0
-        self.emotion = "No Face"
-        self.eye = "No Face"
-        self.head = "No Face"
-        self.audio_peak = 0.0
-        self.duration = 0
-
-    def begin(self, duration):
-        with self.lock:
-            self.audio_chunks.clear()
-            self.video_frames.clear()
-            self.video_frame_count = 0
-            self.start_time = time.monotonic()
-            self.emotion = "No Face"
-            self.eye = "No Face"
-            self.head = "No Face"
-            self.audio_peak = 0.0
-            self.duration = duration
-        self.recording.set()
-
-    def add_audio(self, samples):
-        if not self.recording.is_set():
-            return
-        with self.lock:
-            if self.recording.is_set():
-                clean = np.asarray(samples, dtype=np.float32).reshape(-1)
-                if clean.size:
-                    self.audio_peak = max(self.audio_peak, float(np.max(np.abs(clean))))
-                    self.audio_chunks.append(clean.copy())
-
-    def add_video(self, frame):
-        if not self.recording.is_set():
-            return
-        with self.lock:
-            if not self.recording.is_set():
-                return
-            self.video_frames.append(frame.copy())
-
-    def finish(self):
-        self.recording.clear()
-        with self.lock:
-            audio = np.concatenate(self.audio_chunks) if self.audio_chunks else np.array([], dtype=np.float32)
-            frames = list(self.video_frames)
-        return audio, frames
 
 # --------------------------------------------------
 # Page Configuration
@@ -674,14 +614,14 @@ if st.session_state.current_page == "home":
         - 👁️ **Computer Vision Analysis**  
           Tracks real-time facial expressions, gaze alignment, head rotation, and eye contact consistency using 468 landmark points.
 
-        - 🎙️ **Audio Analysis**
-          Transcribes speech on CPU and classifies ambient background noise.
+        - 🎙️ **Acoustics & Whisper Speech-to-Text**  
+          Measures speaking tempo (WPM), hesitation, filler words (um, uh, like), and classifies ambient background noise.
 
-        - 🧠 **Keyword & Knowledge Matching**
-          Checks for expected concepts using lightweight keyword matching.
+        - 🧠 **Semantic NLP & Knowledge Matching**  
+          Compares your answer semantically against domain concepts using dense vector embeddings and cosine similarity.
 
-        > ⚡ **Camera & Microphone**
-        On the interview screen, start the browser camera and microphone, allow access, then begin the timed assessment.
+        > ⚡ **Hardware Readiness**  
+        In the next screen, you will enter the Live Camera Room where your webcam and microphone telemetry are monitored before launching the assessment.
         """)
 
 # ==================================================
@@ -705,7 +645,7 @@ elif st.session_state.current_page == "interview":
         st.markdown(" ".join(f"**{concept['name']}**" for concept in q_concepts))
 
     # 2-Column Cockpit Layout
-    cam_col, tel_col = st.columns([1.45, 0.65], gap="large")
+    cam_col, tel_col = st.columns([1.1, 0.9], gap="large")
 
     with cam_col:
         st.markdown("### 📷 Vision & Facial Recognition Viewport")
@@ -743,66 +683,8 @@ elif st.session_state.current_page == "interview":
             '</div>'
         )
 
-        if "browser_media_buffer" not in st.session_state:
-            st.session_state.browser_media_buffer = BrowserMediaBuffer()
-        media_buffer = st.session_state.browser_media_buffer
-        audio_resampler = av.AudioResampler(format="s16", layout="mono", rate=16000)
-        st.caption("Start the camera and microphone in the player, allow browser access, then start the timed interview.")
-
-        def capture_video(frame):
-            image = frame.to_ndarray(format="bgr24")
-            if media_buffer.recording.is_set():
-                media_buffer.video_frame_count += 1
-                if media_buffer.video_frame_count % 30 == 0:
-                    media_buffer.add_video(cv2.resize(image, (640, 480)))
-                    try:
-                        from backend.vision.emotion_detector import detect_emotion
-                        from backend.vision.eye_contact import detect_eye_contact
-                        from backend.vision.head_pose import detect_head_pose
-                        media_buffer.emotion, _, _ = detect_emotion(image)
-                        media_buffer.eye = detect_eye_contact(image)
-                        media_buffer.head = detect_head_pose(image)
-                    except Exception:
-                        pass
-
-            left, top = 18, 32
-            overlay_lines = [
-                (f"Emotion: {media_buffer.emotion}", (0, 255, 0)),
-                (f"Eye: {media_buffer.eye}", (255, 255, 0)),
-                (f"Head: {media_buffer.head}", (0, 200, 255)),
-            ]
-            if media_buffer.recording.is_set():
-                remaining = max(0, int(media_buffer.duration - (time.monotonic() - media_buffer.start_time)))
-                overlay_lines.append((f"Time Left: {remaining}s", (255, 255, 255)))
-            cv2.rectangle(image, (8, 8), (300, 160 if len(overlay_lines) > 3 else 125), (15, 15, 18), -1)
-            for index, (label, color) in enumerate(overlay_lines):
-                cv2.putText(image, label, (left, top + index * 34), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2, cv2.LINE_AA)
-            output_frame = av.VideoFrame.from_ndarray(image, format="bgr24")
-            output_frame.pts = frame.pts
-            output_frame.time_base = frame.time_base
-            return output_frame
-
-        def capture_audio(frame):
-            if media_buffer.recording.is_set():
-                for converted in audio_resampler.resample(frame):
-                    raw = converted.to_ndarray()
-                    if np.issubdtype(raw.dtype, np.integer):
-                        scale = float(max(abs(np.iinfo(raw.dtype).min), np.iinfo(raw.dtype).max))
-                        samples = raw.reshape(-1).astype(np.float32) / scale
-                    else:
-                        samples = raw.reshape(-1).astype(np.float32)
-                    media_buffer.add_audio(samples)
-            return frame
-
-        rtc_context = webrtc_streamer(
-            key="interview-browser-media",
-            mode=WebRtcMode.SENDRECV,
-            video_frame_callback=capture_video,
-            audio_frame_callback=capture_audio,
-            media_stream_constraints={"video": True, "audio": True},
-            sendback_audio=False,
-            rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
-        )
+        if not st.session_state.interview_completed:
+            video_slot.markdown(standby_html, unsafe_allow_html=True)
 
         st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
 
@@ -811,45 +693,32 @@ elif st.session_state.current_page == "interview":
             start_btn = st.button("▶ Start Interview Session", use_container_width=True)
 
             if start_btn:
-                if not rtc_context.state.playing:
-                    st.warning("Start the camera and microphone in the video panel first, then allow browser access.")
-                else:
-                    service = get_interview_service()
-                    if service is None:
-                        st.stop()
-                    import backend.audio.speech_analyzer as speech_module
-                    import backend.vision.interview_analyzer as vision_module
+                service = get_interview_service()
+                if service is None:
+                    st.stop()
 
-                    media_buffer.begin(st.session_state.duration)
-                    with st.spinner(f"Recording camera and microphone for {st.session_state.duration} seconds, then analyzing..."):
-                        try:
-                            time.sleep(st.session_state.duration)
-                            audio_samples, video_frames = media_buffer.finish()
-                            if audio_samples.size == 0:
-                                st.warning("The microphone sent no audio. Check Chrome's microphone permission and selected input, then try again.")
-                            elif media_buffer.audio_peak < 0.002:
-                                st.warning("The microphone recording is nearly silent. Check the selected microphone and speak closer to it.")
-                            speech_result = speech_module.analyze_speech_audio(audio_samples, sample_rate=16000)
-                            vision_result = vision_module.analyze_interview_frames(video_frames)
-                            result = service.run(
-                                duration=st.session_state.duration,
-                                role=st.session_state.active_role,
-                                question_number=st.session_state.question_idx,
-                                precomputed_speech=speech_result,
-                                precomputed_vision=vision_result,
-                            )
+                def update_video_feed(frame):
+                    video_slot.image(frame, channels="RGB", use_container_width=True)
 
-                            st.session_state.last_result = result
-                            st.session_state.interview_completed = True
-                            st.rerun()
-                        except Exception as e:
-                            media_buffer.finish()
-                            st.error(f"Interview run error: {e}")
+                with st.spinner(f"Interview session in progress... Answer naturally for {st.session_state.duration} seconds"):
+                    try:
+                        result = service.run(
+                            duration=st.session_state.duration,
+                            role=st.session_state.active_role,
+                            question_number=st.session_state.question_idx,
+                            frame_callback=update_video_feed
+                        )
+
+                        st.session_state.last_result = result
+                        st.session_state.interview_completed = True
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Interview run error: {e}")
         else:
             # Interview Completed - Finish Interview Button
             st.markdown("""
             <div style="background: rgba(255, 45, 117, 0.1); border: 1px solid rgba(255, 45, 117, 0.35); border-radius: 12px; padding: 0.9rem; text-align: center; margin-bottom: 10px;">
-                <span style="color: #ff6699; font-weight: 700; font-size: 0.95rem;">✅ Interview Capture & Analysis Completed!</span>
+                <span style="color: #ff6699; font-weight: 700; font-size: 0.95rem;">✅ Interview Recording & Analysis Completed!</span>
             </div>
             """, unsafe_allow_html=True)
             
@@ -887,7 +756,7 @@ elif st.session_state.current_page == "interview":
                     <span style="font-size: 18px;">📷</span>
                     <span style="font-size: 0.88rem; font-weight: 600; color: #ffffff;">Camera & Vision Engine</span>
                 </div>
-                <span class="badge badge-green">Browser Media</span>
+                <span class="badge badge-green">Hardware Connected</span>
             </div>
             <div style="font-size: 0.76rem; color: #a1a1aa;">interview_analyzer.py · OpenCV & FaceMesh</div>
         </div>
@@ -899,9 +768,9 @@ elif st.session_state.current_page == "interview":
                     <span style="font-size: 18px;">🎙️</span>
                     <span style="font-size: 0.88rem; font-weight: 600; color: #ffffff;">Microphone & Sound Pipeline</span>
                 </div>
-                <span class="badge badge-green">Browser Media</span>
+                <span class="badge badge-green">Hardware Connected</span>
             </div>
-            <div style="font-size: 0.76rem; color: #a1a1aa;">Browser microphone · faster-whisper</div>
+            <div style="font-size: 0.76rem; color: #a1a1aa;">speech_analyzer.py · SoundDevice & Whisper</div>
         </div>
 
         <!-- AI Engine -->
@@ -1153,7 +1022,7 @@ elif st.session_state.current_page == "results":
                 st.markdown("""
                 <div class="glass-panel">
                     <div style="font-family: 'Outfit', sans-serif; font-size: 1.05rem; font-weight: 700; margin-bottom: 0.8rem; color: #ffffff;">
-                        📝 Speech Transcript
+                        📝 Verbatim Whisper Transcript
                     </div>
                 """, unsafe_allow_html=True)
                 transcript = res.get("transcript", "")
@@ -1164,18 +1033,11 @@ elif st.session_state.current_page == "results":
                     </div>
                     """, unsafe_allow_html=True)
                 else:
-                    audio_rms = float(res.get("audio_rms", 0) or 0)
-                    recorded_seconds = float(res.get("recorded_seconds", 0) or 0)
-                    empty_message = (
-                        "No microphone audio reached the app. Check Chrome microphone access and your selected input."
-                        if recorded_seconds <= 0 or audio_rms < 0.002
-                        else "Whisper could not recognize speech in the captured audio. Try speaking clearly and closer to the microphone."
-                    )
                     st.markdown("""
                     <div class="transcript-bubble" style="color: #a1a1aa; font-style: italic;">
-                        {empty_message}
+                        No audio speech detected or transcribed during the window.
                     </div>
-                    """.format(empty_message=empty_message), unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)
                 st.markdown("</div>", unsafe_allow_html=True)
 
         # Tab 3: Visual & Posture

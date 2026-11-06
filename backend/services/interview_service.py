@@ -52,8 +52,6 @@ class InterviewService:
         question_number=1,
         frame_callback=None,
         status_callback=None,
-        precomputed_speech=None,
-        precomputed_vision=None,
         **kwargs
     ):
         if frame_callback is None and "frame_callback" in kwargs:
@@ -85,18 +83,20 @@ class InterviewService:
         # --------------------------------------------------
         # Run Speech in background thread
         # --------------------------------------------------
-        if precomputed_speech is not None and precomputed_vision is not None:
-            self.speech_result = precomputed_speech
-            self.vision_result = precomputed_vision
-        else:
-            speech_thread = threading.Thread(
-                target=self.run_speech,
-                args=(duration, start_event)
-            )
-            speech_thread.start()
-            start_event.set()
-            self.run_vision(duration, start_event, frame_callback=frame_callback)
-            speech_thread.join()
+        speech_thread = threading.Thread(
+            target=self.run_speech,
+            args=(duration, start_event)
+        )
+
+        speech_thread.start()
+
+        # Start capture event
+        start_event.set()
+
+        # Run vision on the main thread so Streamlit can update frames in container
+        self.run_vision(duration, start_event, frame_callback=frame_callback)
+
+        speech_thread.join()
 
         # Fallback defaults if either thread returned None
         if not self.vision_result or not isinstance(self.vision_result, dict):
@@ -216,9 +216,6 @@ class InterviewService:
             # Speech
             "speech_score": self.speech_result.get("speech_score", 75),
             "transcript": transcript,
-            "recorded_seconds": self.speech_result.get("recorded_seconds", 0),
-            "speech_seconds": self.speech_result.get("speech_seconds", 0),
-            "audio_rms": self.speech_result.get("audio_rms", 0),
             "background": self.speech_result.get("background", "Clear"),
             "wpm": self.speech_result.get("wpm", 0),
             "fillers": self.speech_result.get("total_fillers", 0),
