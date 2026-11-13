@@ -1,3 +1,6 @@
+import os
+from pathlib import Path
+
 import requests
 import streamlit as st
 from streamlit.errors import StreamlitSecretNotFoundError
@@ -12,14 +15,46 @@ class FirebaseAuthError(ValueError):
 
 
 def _get_api_key():
+    api_key = None
     try:
         api_key = st.secrets["firebase"]["api_key"]
-    except (KeyError, StreamlitSecretNotFoundError) as exc:
+    except (KeyError, StreamlitSecretNotFoundError, FileNotFoundError, Exception):
+        pass
+
+    if not api_key:
+        api_key = (
+            os.getenv("FIREBASE_API_KEY")
+            or os.getenv("FIREBASE_API")
+            or os.getenv("firebase_api")
+        )
+
+    if not api_key:
+        for env_path in [
+            Path(__file__).resolve().parents[2] / ".env",
+            Path.cwd() / ".env",
+            Path.cwd() / "AI-multimodal-assessment-system" / ".env",
+        ]:
+            if env_path.is_file():
+                try:
+                    for line in env_path.read_text(encoding="utf-8").splitlines():
+                        line = line.strip()
+                        if line.startswith("#") or "=" not in line:
+                            continue
+                        k, v = line.split("=", 1)
+                        if k.strip().lower() in ("firebase_api", "firebase_api_key"):
+                            api_key = v.strip().strip('"').strip("'")
+                            break
+                except Exception:
+                    pass
+            if api_key:
+                break
+
+    if not api_key:
         raise FirebaseAuthError(
             "CONFIGURATION_ERROR",
             "Firebase configuration is missing. Add "
             "[firebase] api_key to .streamlit/secrets.toml.",
-        ) from exc
+        )
 
     if (
         not isinstance(api_key, str)
@@ -88,6 +123,12 @@ def _firebase_request(endpoint, payload):
                 "Check that the Firebase Web API key belongs to your project.",
             "OPERATION_NOT_ALLOWED":
                 "Enable Email/Password in Firebase Authentication.",
+            "INVALID_ID_TOKEN":
+                "The authentication token is invalid or expired. Please sign in again.",
+            "USER_NOT_FOUND":
+                "No account found for this user.",
+            "CREDENTIAL_TOO_OLD_LOGIN_AGAIN":
+                "Your session has expired. Please log out and sign in again before changing sensitive settings.",
         }
 
         if error_code.startswith("WEAK_PASSWORD"):
@@ -144,6 +185,38 @@ def login_user(email, password):
     )
 
 
+def send_verification_email(id_token):
+    if not isinstance(id_token, str) or not id_token.strip():
+        raise FirebaseAuthError(
+            "INVALID_TOKEN",
+            "An authentication token is required to send a verification email.",
+        )
+
+    return _firebase_request(
+        "sendOobCode",
+        {
+            "requestType": "VERIFY_EMAIL",
+            "idToken": id_token.strip(),
+        },
+    )
+
+
+def send_password_reset_email(email):
+    if not isinstance(email, str) or not email.strip():
+        raise FirebaseAuthError(
+            "INVALID_EMAIL",
+            "Please enter a valid email address.",
+        )
+
+    return _firebase_request(
+        "sendOobCode",
+        {
+            "requestType": "PASSWORD_RESET",
+            "email": email.strip(),
+        },
+    )
+
+
 def get_user_profile(id_token, expected_uid):
     data = _firebase_request("lookup", {"idToken": id_token})
     users = data.get("users")
@@ -168,3 +241,44 @@ def get_user_profile(id_token, expected_uid):
         )
 
     return profile
+
+
+def update_user_profile(id_token, display_name=None, photo_url=None):
+    if not isinstance(id_token, str) or not id_token.strip():
+        raise FirebaseAuthError(
+            "INVALID_TOKEN",
+            "An authentication token is required to update profile.",
+        )
+
+    payload = {
+        "idToken": id_token.strip(),
+        "returnSecureToken": True,
+    }
+    if display_name is not None:
+        payload["displayName"] = display_name.strip()
+    if photo_url is not None:
+        payload["photoUrl"] = photo_url.strip()
+
+    return _firebase_request("update", payload)
+
+
+def update_user_password(id_token, new_password):
+    if not isinstance(id_token, str) or not id_token.strip():
+        raise FirebaseAuthError(
+            "INVALID_TOKEN",
+            "An authentication token is required to update password.",
+        )
+    if not isinstance(new_password, str) or len(new_password) < 6:
+        raise FirebaseAuthError(
+            "WEAK_PASSWORD",
+            "Password must contain at least 6 characters.",
+        )
+
+    return _firebase_request(
+        "update",
+        {
+            "idToken": id_token.strip(),
+            "password": new_password,
+            "returnSecureToken": True,
+        },
+    )

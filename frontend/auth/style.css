@@ -197,10 +197,28 @@ div[data-testid="stFormSubmitButton"] button[kind="primary"]:hover {
     border-radius: 9px;
     min-height: 38px;
     font-weight: 700;
+    font-size: 13px;
+    padding-left: 6px;
+    padding-right: 6px;
 }
 
 .st-key-auth-screen div[data-testid="stFormSubmitButton"] button[kind="secondary"]:hover {
     background: #ff34781a;
+    border-color: #ff3478;
+    color: #ffffff;
+}
+
+.st-key-auth-screen div.stButton > button:not([kind="primary"]) {
+    background: transparent;
+    color: #a8a8b3;
+    border: 1px solid #302b36;
+    border-radius: 9px;
+    min-height: 38px;
+    font-weight: 600;
+}
+
+.st-key-auth-screen div.stButton > button:not([kind="primary"]):hover {
+    background: #ffffff0a;
     border-color: #ff3478;
     color: #ffffff;
 }

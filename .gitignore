@@ -232,6 +232,8 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 **/.streamlit/secrets.toml
+frontend/avatars/
+**/frontend/avatars/
 
 # Scratch & temporary reverse-engineering artifacts
 scratch_*
