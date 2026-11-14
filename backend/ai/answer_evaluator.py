@@ -5,14 +5,19 @@ import re
 
 
 # --------------------------------------------------
-# Load semantic model ONCE
+# Lazy-load semantic model
 # --------------------------------------------------
 
-print("Loading semantic evaluation model...")
+_semantic_model = None
 
-model = SentenceTransformer("all-MiniLM-L6-v2")
 
-print("Semantic model loaded!")
+def get_semantic_model():
+    global _semantic_model
+    if _semantic_model is None:
+        print("Loading semantic evaluation model lazily...")
+        _semantic_model = SentenceTransformer("all-MiniLM-L6-v2")
+        print("Semantic model loaded!")
+    return _semantic_model
 
 
 # --------------------------------------------------
@@ -41,7 +46,8 @@ def semantic_similarity(text1, text2):
     if not text1 or not text2:
         return 0.0
 
-    embeddings = model.encode(
+    semantic_model = get_semantic_model()
+    embeddings = semantic_model.encode(
         [text1, text2],
         normalize_embeddings=True
     )
@@ -103,7 +109,8 @@ def concept_coverage(answer, expected_concepts):
             "concept_scores": {}
         }
 
-    sentence_embeddings = model.encode(
+    semantic_model = get_semantic_model()
+    sentence_embeddings = semantic_model.encode(
         sentences,
         normalize_embeddings=True
     )
@@ -145,7 +152,7 @@ def concept_coverage(answer, expected_concepts):
 
         for phrase in phrases:
 
-            phrase_embedding = model.encode(
+            phrase_embedding = semantic_model.encode(
                 [phrase],
                 normalize_embeddings=True
             )

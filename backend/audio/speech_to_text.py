@@ -1,53 +1,59 @@
 import whisper
 from collections import Counter
 
-print("Loading Whisper model...")
 
-model = whisper.load_model("base")
+def main():
+    print("Loading Whisper model...")
 
-print("Model loaded!")
+    model = whisper.load_model("base")
 
-audio_file = "sample.wav"
+    print("Model loaded!")
 
-result = model.transcribe(audio_file)
+    audio_file = "sample.wav"
 
-transcript = result["text"]
+    result = model.transcribe(audio_file)
 
-print("\nTranscript:")
-print(transcript)
+    transcript = result["text"]
 
-# -----------------------------
-# Filler Word Detection
-# -----------------------------
+    print("\nTranscript:")
+    print(transcript)
 
-fillers = [
-    "um",
-    "uh",
-    "like",
-    "actually",
-    "basically",
-    "you know",
-    "so"
-]
+    # -----------------------------
+    # Filler Word Detection
+    # -----------------------------
 
-words = transcript.lower().split()
+    fillers = [
+        "um",
+        "uh",
+        "like",
+        "actually",
+        "basically",
+        "you know",
+        "so"
+    ]
 
-counter = Counter(words)
+    words = transcript.lower().split()
 
-print("\n--------------------------")
-print("FILLER WORDS")
-print("--------------------------")
+    counter = Counter(words)
 
-total = 0
+    print("\n--------------------------")
+    print("FILLER WORDS")
+    print("--------------------------")
 
-for filler in fillers:
+    total = 0
 
-    count = counter[filler]
+    for filler in fillers:
 
-    if count > 0:
-        print(f"{filler:<12}: {count}")
+        count = counter[filler]
 
-    total += count
+        if count > 0:
+            print(f"{filler:<12}: {count}")
 
-print("--------------------------")
-print("Total fillers:", total)
+        total += count
+
+    print("--------------------------")
+    print("Total fillers:", total)
+
+
+if __name__ == "__main__":
+    main()

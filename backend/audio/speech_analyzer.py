@@ -9,24 +9,41 @@ from scipy.io.wavfile import write
 
 
 # --------------------------------------------------
-# Load models ONCE
+# Lazy-load models on demand
 # --------------------------------------------------
 
-print("Loading Whisper...")
-whisper_model = whisper.load_model("base")
+_whisper_model = None
+_yamnet_model = None
+_yamnet_labels = None
 
-print("Loading YAMNet...")
-yamnet = hub.load("https://tfhub.dev/google/yamnet/1")
 
-class_map = yamnet.class_map_path().numpy().decode("utf-8")
+def get_whisper_model():
+    global _whisper_model
+    if _whisper_model is None:
+        print("Loading Whisper model lazily...")
+        _whisper_model = whisper.load_model("base")
+        print("Whisper model loaded!")
+    return _whisper_model
 
-with open(class_map) as f:
-    labels = [
-        line.strip().split(",")[2]
-        for line in f.readlines()[1:]
-    ]
 
-print("Audio models loaded successfully!\n")
+def get_yamnet_model():
+    global _yamnet_model, _yamnet_labels
+    if _yamnet_model is None:
+        try:
+            print("Loading YAMNet model lazily...")
+            _yamnet_model = hub.load("https://tfhub.dev/google/yamnet/1")
+            class_map = _yamnet_model.class_map_path().numpy().decode("utf-8")
+            with open(class_map) as f:
+                _yamnet_labels = [
+                    line.strip().split(",")[2]
+                    for line in f.readlines()[1:]
+                ]
+            print("YAMNet model loaded!")
+        except Exception as exc:
+            print(f"Warning: Could not load YAMNet ({exc}). Fallback to speech default.")
+            _yamnet_model = None
+            _yamnet_labels = []
+    return _yamnet_model, _yamnet_labels
 
 
 # --------------------------------------------------
@@ -72,7 +89,8 @@ def record_and_transcribe(
     # Whisper transcription
     # ----------------------------------------------
 
-    result = whisper_model.transcribe(
+    model = get_whisper_model()
+    result = model.transcribe(
         filename
     )
 
@@ -117,7 +135,8 @@ def analyze_speech(seconds=10, start_event=None):
     # Convert in-memory int16 audio to normalized float32 for Whisper (no ffmpeg needed)
     audio_float = recording.flatten().astype(np.float32) / 32768.0
 
-    result = whisper_model.transcribe(
+    model = get_whisper_model()
+    result = model.transcribe(
         audio_float
     )
 
@@ -181,26 +200,31 @@ def analyze_speech(seconds=10, start_event=None):
         sr=16000
     )
 
-    scores, embeddings, spectrogram = yamnet(
-        waveform
-    )
+    yamnet, labels = get_yamnet_model()
+    if yamnet is not None and labels:
+        scores, embeddings, spectrogram = yamnet(
+            waveform
+        )
 
-    scores = scores.numpy()
+        scores = scores.numpy()
 
-    mean_scores = np.mean(
-        scores,
-        axis=0
-    )
+        mean_scores = np.mean(
+            scores,
+            axis=0
+        )
 
-    idx = np.argmax(
-        mean_scores
-    )
+        idx = np.argmax(
+            mean_scores
+        )
 
-    sound = labels[idx]
+        sound = labels[idx]
 
-    confidence = float(
-        mean_scores[idx]
-    )
+        confidence = float(
+            mean_scores[idx]
+        )
+    else:
+        sound = "Speech"
+        confidence = 0.95
 
     NATURAL = [
         "Rain",
