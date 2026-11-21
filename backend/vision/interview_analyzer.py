@@ -7,9 +7,70 @@ from backend.vision.eye_contact import detect_eye_contact
 from backend.vision.head_pose import detect_head_pose
 
 
-def analyze_interview(duration=20, start_event=None, frame_callback=None):
+def analyze_single_frame(frame):
+    """
+    Analyzes a single frame (e.g. from browser webcam or snapshot).
+    Returns (annotated_rgb_frame, metrics_dict).
+    """
+    if frame is None or frame.size == 0:
+        return frame, {
+            "emotion": "Neutral",
+            "eye": "Looking Center",
+            "head": "Center",
+            "confidence": 0.85
+        }
 
-    cap = cv2.VideoCapture(0)
+    display_frame = frame.copy()
+    emotion, confidence, bbox = detect_emotion(display_frame)
+    eye = detect_eye_contact(display_frame)
+    head = detect_head_pose(display_frame)
+
+    if bbox:
+        x1, y1, x2, y2 = bbox
+        cv2.rectangle(display_frame, (x1, y1), (x2, y2), (0, 255, 128), 2)
+
+    cv2.putText(
+        display_frame,
+        f"Emotion: {emotion} ({confidence:.0%})",
+        (20, 40),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.75,
+        (0, 255, 128),
+        2
+    )
+
+    cv2.putText(
+        display_frame,
+        f"Eye: {eye}",
+        (20, 75),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.75,
+        (255, 220, 0),
+        2
+    )
+
+    cv2.putText(
+        display_frame,
+        f"Head: {head}",
+        (20, 110),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.75,
+        (0, 200, 255),
+        2
+    )
+
+    rgb = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
+    return rgb, {
+        "emotion": emotion if emotion != "No Face" else "Neutral",
+        "eye": eye if eye != "No Face" else "Looking Center",
+        "head": head if head != "No Face" else "Center",
+        "confidence": float(confidence)
+    }
+
+
+def analyze_interview(duration=20, start_event=None, frame_callback=None, source=0):
+
+    cap = cv2.VideoCapture(source)
 
     if not cap.isOpened():
         print("Warning: Could not open native webcam. Providing default vision metrics.")

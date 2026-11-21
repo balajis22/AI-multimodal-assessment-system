@@ -747,7 +747,77 @@ elif st.session_state.current_page == "interview":
 
     with cam_col:
         st.markdown("### 📷 Vision & Facial Recognition Viewport")
-        
+
+        tab_cam, tab_upload = st.tabs(["🌐 Live Browser Camera", "📁 Upload Video Clip"])
+
+        with tab_cam:
+            st.caption("Allow camera access in your browser to analyze facial emotion, gaze, and head rotation live.")
+            cam_shot = st.camera_input(
+                "Capture Face Telemetry for Real-Time AI Evaluation",
+                key="browser_interview_camera"
+            )
+            if cam_shot is not None:
+                try:
+                    import cv2
+                    import numpy as np
+                    from backend.vision.interview_analyzer import analyze_single_frame
+
+                    frame_bytes = cam_shot.getvalue()
+                    nparr = np.frombuffer(frame_bytes, np.uint8)
+                    frame_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+                    annotated_rgb, metrics = analyze_single_frame(frame_bgr)
+                    st.session_state["candidate_vision_metrics"] = metrics
+                    st.session_state["candidate_vision_annotated"] = annotated_rgb
+
+                    st.markdown("""
+                    <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 10px; padding: 0.6rem 0.9rem; margin: 0.6rem 0;">
+                        <span style="color: #34d399; font-weight: 700; font-size: 0.88rem;">✅ Facial Landmarks & Biometrics Successfully Analyzed!</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    st.image(annotated_rgb, caption="Face Landmarks, Emotion & Gaze Overlay", use_container_width=True)
+
+                    c_em, c_eye, c_head = st.columns(3)
+                    with c_em:
+                        st.metric("🎭 Emotion", f"{metrics['emotion']}", f"{int(metrics.get('confidence', 0.85)*100)}% conf")
+                    with c_eye:
+                        st.metric("👁️ Eye Gaze", f"{metrics['eye']}")
+                    with c_head:
+                        st.metric("👤 Head Pose", f"{metrics['head']}")
+                except Exception as exc:
+                    st.warning(f"Could not analyze camera frame: {exc}")
+
+        with tab_upload:
+            st.caption("Upload a recorded candidate video clip to extract full facial, eye gaze, and head pose timeline.")
+            uploaded_vid = st.file_uploader(
+                "Upload candidate video file (.mp4, .webm, .mov)",
+                type=["mp4", "webm", "mov", "avi"],
+                key="candidate_video_upload_input"
+            )
+            if uploaded_vid is not None:
+                import tempfile
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_file:
+                    tmp_file.write(uploaded_vid.read())
+                    temp_vid_path = tmp_file.name
+
+                with st.spinner("Processing video frames with OpenCV and FaceMesh..."):
+                    try:
+                        from backend.vision.interview_analyzer import analyze_interview
+                        vid_metrics = analyze_interview(duration=st.session_state.duration, source=temp_vid_path)
+                        st.session_state["candidate_vision_metrics"] = vid_metrics
+                        st.session_state["candidate_uploaded_video_path"] = temp_vid_path
+                        st.success("✅ Video telemetry extracted successfully!")
+                        c_em, c_eye, c_head = st.columns(3)
+                        with c_em:
+                            st.metric("🎭 Emotion", f"{vid_metrics['emotion']}")
+                        with c_eye:
+                            st.metric("👁️ Eye Gaze", f"{vid_metrics['eye']}")
+                        with c_head:
+                            st.metric("👤 Head Pose", f"{vid_metrics['head']}")
+                    except Exception as exc:
+                        st.warning(f"Could not analyze video: {exc}")
+
         # Native Hardware Camera Viewport slot
         video_slot = st.empty()
 
@@ -755,10 +825,10 @@ elif st.session_state.current_page == "interview":
             '<div style="position: relative; width: 100%; aspect-ratio: 16 / 9.5; background: #050508; '
             'border: 1px solid rgba(255, 45, 117, 0.35); border-radius: 14px; overflow: hidden; '
             'display: flex; flex-direction: column; align-items: center; justify-content: center; '
-            'box-shadow: 0 4px 28px rgba(0, 0, 0, 0.75); padding: 1.5rem; text-align: center;">'
+            'box-shadow: 0 4px 28px rgba(0, 0, 0, 0.75); padding: 1.5rem; text-align: center; margin-top: 10px;">'
             '<div style="position: absolute; top: 14px; left: 16px; display: flex; align-items: center; gap: 8px;">'
             '<span class="status-dot-pink"></span>'
-            '<span style="font-family: \'JetBrains Mono\', monospace; font-size: 0.75rem; letter-spacing: 0.08em; color: #ff6699; font-weight: 700; text-transform: uppercase;">Native Hardware Module</span>'
+            '<span style="font-family: \'JetBrains Mono\', monospace; font-size: 0.75rem; letter-spacing: 0.08em; color: #ff6699; font-weight: 700; text-transform: uppercase;">Assessment Module</span>'
             '</div>'
             '<div style="position: absolute; top: 14px; right: 16px;">'
             '<span class="badge badge-pink" style="font-size: 0.72rem; padding: 3px 9px;">OpenCV + FaceMesh</span>'
@@ -770,10 +840,10 @@ elif st.session_state.current_page == "interview":
             'Facial Recognition & Acoustic Sensors Ready'
             '</div>'
             '<div style="font-size: 0.82rem; color: #a1a1aa; max-width: 440px; line-height: 1.5;">'
-            'Click <strong>Start Interview Session</strong> below. Live camera feed with facial landmarks, emotion detection, and gaze direction will stream directly inside this container.'
+            'Click <strong>Start Interview Session</strong> below. Live audio analysis and facial biometrics will be evaluated.'
             '</div>'
             '<div style="position: absolute; bottom: 12px; left: 16px; font-family: \'JetBrains Mono\', monospace; font-size: 0.7rem; color: rgba(255, 255, 255, 0.4);">'
-            'FEED: IN-CONTAINER · 16kHz WAV'
+            'FEED: BROWSER / HARDWARE · 16kHz WAV'
             '</div>'
             '<div style="position: absolute; bottom: 12px; right: 16px; font-family: \'JetBrains Mono\', monospace; font-size: 0.7rem; color: #ff6699; font-weight: 600;">'
             '[ READY TO START ]'
@@ -800,11 +870,15 @@ elif st.session_state.current_page == "interview":
 
                 with st.spinner(f"Interview session in progress... Answer naturally for {st.session_state.duration} seconds"):
                     try:
+                        pre_vision = st.session_state.get("candidate_vision_metrics")
+                        vid_src = st.session_state.get("candidate_uploaded_video_path", 0)
                         result = service.run(
                             duration=st.session_state.duration,
                             role=st.session_state.active_role,
                             question_number=st.session_state.question_idx,
-                            frame_callback=update_video_feed
+                            frame_callback=update_video_feed,
+                            precomputed_vision=pre_vision,
+                            source=vid_src
                         )
 
                         st.session_state.last_result = result
@@ -837,6 +911,10 @@ elif st.session_state.current_page == "interview":
             </div>
         """, unsafe_allow_html=True)
 
+        cand_vis = st.session_state.get("candidate_vision_metrics")
+        vis_badge = '<span class="badge badge-green">Live Telemetry Active</span>' if cand_vis else '<span class="badge badge-pink">Camera Ready</span>'
+        vis_detail = f"Emotion: {cand_vis.get('emotion', 'Neutral')} · Gaze: {cand_vis.get('eye', 'Center')}" if cand_vis else "interview_analyzer.py · OpenCV & FaceMesh"
+
         st.markdown(f"""
         <!-- Candidate pill -->
         <div style="background: rgba(14, 14, 18, 0.85); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 0.85rem 1rem; margin-bottom: 0.8rem; display: flex; justify-content: space-between; align-items: center;">
@@ -855,9 +933,9 @@ elif st.session_state.current_page == "interview":
                     <span style="font-size: 18px;">📷</span>
                     <span style="font-size: 0.88rem; font-weight: 600; color: #ffffff;">Camera & Vision Engine</span>
                 </div>
-                <span class="badge badge-green">Hardware Connected</span>
+                {vis_badge}
             </div>
-            <div style="font-size: 0.76rem; color: #a1a1aa;">interview_analyzer.py · OpenCV & FaceMesh</div>
+            <div style="font-size: 0.76rem; color: #ff6699; font-weight: 600;">{vis_detail}</div>
         </div>
 
         <!-- Audio Telemetry -->

@@ -20,12 +20,19 @@ class InterviewService:
     # THREAD FUNCTIONS
     # --------------------------------------------------
 
-    def run_vision(self, duration, start_event, frame_callback=None):
+    def run_vision(self, duration, start_event, frame_callback=None, precomputed_vision=None, source=0):
+        if precomputed_vision:
+            self.vision_result = precomputed_vision
+            if start_event is not None:
+                start_event.wait()
+            return
+
         try:
             self.vision_result = analyze_interview(
                 duration,
                 start_event,
-                frame_callback
+                frame_callback,
+                source=source
             )
         except Exception as e:
             print(f"Vision error: {e}")
@@ -52,10 +59,14 @@ class InterviewService:
         question_number=1,
         frame_callback=None,
         status_callback=None,
+        precomputed_vision=None,
+        source=0,
         **kwargs
     ):
         if frame_callback is None and "frame_callback" in kwargs:
             frame_callback = kwargs["frame_callback"]
+        if precomputed_vision is None and "precomputed_vision" in kwargs:
+            precomputed_vision = kwargs["precomputed_vision"]
         """
         Runs the complete interview pipeline.
 
@@ -94,7 +105,13 @@ class InterviewService:
         start_event.set()
 
         # Run vision on the main thread so Streamlit can update frames in container
-        self.run_vision(duration, start_event, frame_callback=frame_callback)
+        self.run_vision(
+            duration,
+            start_event,
+            frame_callback=frame_callback,
+            precomputed_vision=precomputed_vision,
+            source=source
+        )
 
         speech_thread.join()
 
