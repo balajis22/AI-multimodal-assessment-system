@@ -120,6 +120,8 @@ def main():
 
 if __name__ == "__main__":
     import sys
+    import os
+    os.environ["QT_QPA_PLATFORM"] = "offscreen"
     # If Streamlit is running this file instead of streamlit_app.py, redirect seamlessly to the Streamlit app
     if "streamlit" in sys.modules:
         from frontend.app import *  # noqa: F401,F403

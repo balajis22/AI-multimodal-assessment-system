@@ -186,10 +186,6 @@ def analyze_interview(duration=20, start_event=None, frame_callback=None, source
                 frame_callback(rgb_frame)
             except Exception:
                 pass
-        else:
-            cv2.imshow("Interview Analysis", frame)
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                break
 
         # ---------------------------------
         # Stop after duration seconds for live hardware camera
@@ -198,9 +194,6 @@ def analyze_interview(duration=20, start_event=None, frame_callback=None, source
             break
 
     cap.release()
-    if frame_callback is None:
-        cv2.destroyAllWindows()
-        cv2.waitKey(1)
 
     # ---------------------------------
     # Handle edge case
