@@ -747,170 +747,79 @@ elif st.session_state.current_page == "interview":
 
     with cam_col:
         st.markdown("### 📷 Candidate Virtual Interview Viewport")
+        st.caption("Live video stream from your browser. Click **Start Virtual Interview** below to begin your assessed response.")
 
-        interview_mode = st.radio(
-            "Select Camera Feed Mode:",
-            [
-                "🌐 Virtual Interview (Live Browser Webcam & Mic)",
-                "💻 Native Hardware (Local Desktop Camera)",
-                "📁 Upload Recorded Video"
-            ],
-            horizontal=True,
-            key="interview_feed_mode_selector"
-        )
-
-        if "Virtual Interview" in interview_mode:
-            st.caption("Live video stream from your browser. Click **Start Virtual Interview** below to begin your assessed response.")
-            
-            if not st.session_state.interview_completed:
-                from frontend.components.video_recorder import video_interview_recorder
-                rec_payload = video_interview_recorder(
-                    duration=st.session_state.duration,
-                    key=f"virtual_interview_rec_{st.session_state.question_idx}"
-                )
-
-                if rec_payload and not st.session_state.interview_completed:
-                    with st.spinner("Processing candidate interview: analyzing facial emotion, eye contact, and transcribing speech with Whisper..."):
-                        try:
-                            import base64
-                            import tempfile
-
-                            v_base64 = rec_payload["video"].split(",", 1)[-1]
-                            a_base64 = rec_payload["audio"].split(",", 1)[-1]
-
-                            with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as vf:
-                                vf.write(base64.b64decode(v_base64))
-                                temp_vid_path = vf.name
-
-                            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as af:
-                                af.write(base64.b64decode(a_base64))
-                                temp_aud_path = af.name
-
-                            st.session_state["candidate_uploaded_video_path"] = temp_vid_path
-                            st.session_state["last_recorded_video"] = temp_vid_path
-
-                            service = get_interview_service()
-                            result = service.run(
-                                duration=rec_payload.get("duration", st.session_state.duration),
-                                role=st.session_state.active_role,
-                                question_number=st.session_state.question_idx,
-                                video_path=temp_vid_path,
-                                audio_path=temp_aud_path
-                            )
-
-                            st.session_state.last_result = result
-                            st.session_state["candidate_vision_metrics"] = result.get("vision", {})
-                            st.session_state.interview_completed = True
-                            st.rerun()
-                        except Exception as exc:
-                            st.error(f"Interview assessment processing error: {exc}")
-            else:
-                st.markdown("""
-                <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 12px; padding: 0.9rem; text-align: center; margin-bottom: 12px;">
-                    <span style="color: #34d399; font-weight: 700; font-size: 0.95rem;">✅ Candidate Virtual Interview Successfully Recorded & Evaluated!</span>
-                </div>
-                """, unsafe_allow_html=True)
-                if st.session_state.get("last_recorded_video"):
-                    st.video(st.session_state["last_recorded_video"])
-
-        elif "Native Hardware" in interview_mode:
-            st.caption("Direct hardware access via OpenCV & Sounddevice (ideal for local execution).")
-            video_slot = st.empty()
-
-            standby_html = (
-                '<div style="position: relative; width: 100%; aspect-ratio: 16 / 9.5; background: #050508; '
-                'border: 1px solid rgba(255, 45, 117, 0.35); border-radius: 14px; overflow: hidden; '
-                'display: flex; flex-direction: column; align-items: center; justify-content: center; '
-                'box-shadow: 0 4px 28px rgba(0, 0, 0, 0.75); padding: 1.5rem; text-align: center; margin-top: 10px;">'
-                '<div style="position: absolute; top: 14px; left: 16px; display: flex; align-items: center; gap: 8px;">'
-                '<span class="status-dot-pink"></span>'
-                '<span style="font-family: \'JetBrains Mono\', monospace; font-size: 0.75rem; letter-spacing: 0.08em; color: #ff6699; font-weight: 700; text-transform: uppercase;">Native Hardware Module</span>'
-                '</div>'
-                '<div style="position: absolute; top: 14px; right: 16px;">'
-                '<span class="badge badge-pink" style="font-size: 0.72rem; padding: 3px 9px;">OpenCV + FaceMesh</span>'
-                '</div>'
-                '<div style="width: 80px; height: 80px; border: 2px dashed rgba(255, 45, 117, 0.45); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 12px;">'
-                '<div style="width: 14px; height: 14px; background: #ff2d75; border-radius: 50%; box-shadow: 0 0 16px #ff2d75;"></div>'
-                '</div>'
-                '<div style="font-family: \'Outfit\', sans-serif; font-size: 1.1rem; font-weight: 700; color: #ffffff; margin-bottom: 5px;">'
-                'Facial Recognition & Acoustic Sensors Ready'
-                '</div>'
-                '<div style="font-size: 0.82rem; color: #a1a1aa; max-width: 440px; line-height: 1.5;">'
-                'Click <strong>Start Native Interview</strong> below. Live camera feed will stream directly inside this container.'
-                '</div>'
-                '<div style="position: absolute; bottom: 12px; left: 16px; font-family: \'JetBrains Mono\', monospace; font-size: 0.7rem; color: rgba(255, 255, 255, 0.4);">'
-                'FEED: HARDWARE /dev/video0 · 16kHz WAV'
-                '</div>'
-                '<div style="position: absolute; bottom: 12px; right: 16px; font-family: \'JetBrains Mono\', monospace; font-size: 0.7rem; color: #ff6699; font-weight: 600;">'
-                '[ READY TO START ]'
-                '</div>'
-                '</div>'
+        if not st.session_state.interview_completed:
+            from frontend.components.video_recorder import video_interview_recorder
+            rec_payload = video_interview_recorder(
+                duration=st.session_state.duration,
+                key=f"virtual_interview_rec_{st.session_state.question_idx}"
             )
 
-            if not st.session_state.interview_completed:
-                video_slot.markdown(standby_html, unsafe_allow_html=True)
-                start_btn = st.button("▶ Start Native Interview Session", use_container_width=True)
-                if start_btn:
-                    service = get_interview_service()
-                    if service is None:
-                        st.stop()
+            if rec_payload and not st.session_state.interview_completed:
+                with st.spinner("Processing candidate interview: analyzing facial emotion, eye contact, and transcribing speech with Whisper..."):
+                    try:
+                        import base64
+                        import tempfile
+                        import re
 
-                    def update_video_feed(frame):
-                        video_slot.image(frame, channels="RGB", use_container_width=True)
+                        def decode_b64(uri_or_b64):
+                            if not uri_or_b64:
+                                return b""
+                            if "base64," in uri_or_b64:
+                                raw = uri_or_b64.split("base64,", 1)[-1]
+                            else:
+                                raw = uri_or_b64.rpartition(",")[-1]
+                            raw = re.sub(r"[^A-Za-z0-9+/=]", "", raw)
+                            pad = len(raw) % 4
+                            if pad:
+                                raw += "=" * (4 - pad)
+                            return base64.b64decode(raw)
 
-                    with st.spinner(f"Interview session in progress... Answer naturally for {st.session_state.duration} seconds"):
-                        try:
-                            result = service.run(
-                                duration=st.session_state.duration,
-                                role=st.session_state.active_role,
-                                question_number=st.session_state.question_idx,
-                                frame_callback=update_video_feed,
-                                source=0
-                            )
-                            st.session_state.last_result = result
-                            st.session_state["candidate_vision_metrics"] = result.get("vision", {})
-                            st.session_state.interview_completed = True
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Interview run error: {e}")
+                        video_bytes = decode_b64(rec_payload.get("video", ""))
+                        audio_bytes = decode_b64(rec_payload.get("audio", ""))
 
-        else: # Upload Recorded Video
-            st.caption("Upload a candidate video file (.mp4, .webm, .mov) to evaluate.")
-            uploaded_vid = st.file_uploader(
-                "Upload candidate video file",
-                type=["mp4", "webm", "mov", "avi"],
-                key="candidate_video_upload_input"
-            )
-            if uploaded_vid is not None and not st.session_state.interview_completed:
-                import tempfile
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_file:
-                    tmp_file.write(uploaded_vid.read())
-                    temp_vid_path = tmp_file.name
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as vf:
+                            vf.write(video_bytes)
+                            temp_vid_path = vf.name
 
-                st.session_state["last_recorded_video"] = temp_vid_path
-                st.video(temp_vid_path)
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as af:
+                            af.write(audio_bytes)
+                            temp_aud_path = af.name
 
-                if st.button("🚀 Analyze Uploaded Video", use_container_width=True):
-                    with st.spinner("Processing video frames & speech transcript..."):
+                        st.session_state["candidate_uploaded_video_path"] = temp_vid_path
+                        st.session_state["last_recorded_video"] = temp_vid_path
+
                         service = get_interview_service()
                         result = service.run(
-                            duration=st.session_state.duration,
+                            duration=rec_payload.get("duration", st.session_state.duration),
                             role=st.session_state.active_role,
                             question_number=st.session_state.question_idx,
                             video_path=temp_vid_path,
-                            audio_path=temp_vid_path
+                            audio_path=temp_aud_path
                         )
+
                         st.session_state.last_result = result
                         st.session_state["candidate_vision_metrics"] = result.get("vision", {})
                         st.session_state.interview_completed = True
                         st.rerun()
+                    except Exception as exc:
+                        st.error(f"Interview assessment processing error: {exc}")
+        else:
+            st.markdown("""
+            <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 12px; padding: 0.9rem; text-align: center; margin-bottom: 12px;">
+                <span style="color: #34d399; font-weight: 700; font-size: 0.95rem;">✅ Candidate Virtual Interview Successfully Recorded & Evaluated!</span>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.session_state.get("last_recorded_video"):
+                st.video(st.session_state["last_recorded_video"])
 
-        st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
-
-        if st.session_state.interview_completed:
             finish_btn = st.button("🏁 Finish Interview & View Report ➡️", use_container_width=True)
             if finish_btn:
                 go_to_page("results")
+
+        st.markdown("<div style='height: 14px;'></div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("</div>", unsafe_allow_html=True)
 
