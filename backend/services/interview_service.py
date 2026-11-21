@@ -1,9 +1,12 @@
 import threading
 from time import time
+import os
+import sys
+import json
+import tempfile
+from pathlib import Path
 
 from backend.vision.interview_analyzer import analyze_interview
-from backend.audio.speech_analyzer import analyze_speech
-from backend.ai.answer_evaluator import evaluate_answer
 from backend.ai.question_bank import get_question
 from backend.scoring.scoring_engine import InterviewScorer
 
@@ -38,16 +41,61 @@ class InterviewService:
             print(f"Vision error: {e}")
             self.vision_result = None
 
-    def run_speech(self, duration, start_event, audio_source=None):
+    def run_speech_and_eval_subprocess(self, duration, audio_path, question, expected_concepts):
+        in_file = None
+        out_file = None
         try:
-            self.speech_result = analyze_speech(
-                duration,
-                start_event,
-                audio_source=audio_source
-            )
-        except Exception as e:
-            print(f"Speech error: {e}")
-            self.speech_result = None
+            with tempfile.NamedTemporaryFile("w", delete=False, suffix=".json", encoding="utf-8") as inf:
+                json.dump({
+                    "duration": duration,
+                    "audio_path": str(audio_path) if audio_path else "",
+                    "question": question,
+                    "concepts": expected_concepts
+                }, inf, ensure_ascii=False)
+                in_file = inf.name
+
+            out_file = in_file.replace(".json", "_out.json")
+
+            cmd = [
+                sys.executable,
+                "-m", "backend.workers.speech_nlp_worker",
+                "--input", in_file,
+                "--output", out_file
+            ]
+
+            print(f"Launching isolated speech & NLP evaluation worker...")
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            if proc.stdout:
+                print(f"[Worker stdout]: {proc.stdout}")
+            if proc.stderr:
+                print(f"[Worker stderr]: {proc.stderr}")
+
+            if Path(out_file).is_file():
+                with open(out_file, "r", encoding="utf-8") as outf:
+                    data = json.load(outf)
+                return data.get("speech"), data.get("answer")
+            else:
+                print(f"Worker did not produce output file. Return code: {proc.returncode}")
+        except Exception as exc:
+            print(f"Isolated worker execution error: {exc}")
+        finally:
+            if in_file and Path(in_file).is_file():
+                try: Path(in_file).unlink()
+                except Exception: pass
+            if out_file and Path(out_file).is_file():
+                try: Path(out_file).unlink()
+                except Exception: pass
+
+        # In-process lazy fallback if subprocess fails
+        try:
+            from backend.audio.speech_analyzer import analyze_speech
+            from backend.ai.answer_evaluator import evaluate_answer
+            sp_res = analyze_speech(duration, audio_source=audio_path)
+            ans_res = evaluate_answer(question, sp_res.get("transcript", ""), expected_concepts)
+            return sp_res, ans_res
+        except Exception as fallback_exc:
+            print(f"In-process evaluation fallback error: {fallback_exc}")
+            return None, None
 
     # --------------------------------------------------
     # MAIN INTERVIEW
@@ -77,8 +125,8 @@ class InterviewService:
 
         Includes:
         - Computer Vision (with in-container frame_callback support)
-        - Speech Analysis
-        - Semantic Answer Evaluation
+        - Speech Analysis (Isolated worker process)
+        - Semantic Answer Evaluation (Isolated worker process)
         - Interview Scoring
         """
 
@@ -94,33 +142,27 @@ class InterviewService:
         question = question_data["question"]
         expected_concepts = question_data["concepts"]
 
-        start_event = threading.Event()
-
-        # --------------------------------------------------
-        # Run Speech in background thread
-        # --------------------------------------------------
-        speech_thread = threading.Thread(
-            target=self.run_speech,
-            args=(duration, start_event, audio_path)
-        )
-
-        speech_thread.start()
-
-        # Start capture event
-        start_event.set()
-
-        # Run vision on the main thread so Streamlit can update frames in container
+        # 1. First, run Computer Vision (MediaPipe + OpenCV + Emotion Model)
         self.run_vision(
             duration,
-            start_event,
+            start_event=None,
             frame_callback=frame_callback,
             precomputed_vision=precomputed_vision,
             source=source
         )
 
-        speech_thread.join()
+        # 2. Next, run Speech & Semantic NLP in an isolated process to avoid LLVM conflicts
+        speech_res, answer_res = self.run_speech_and_eval_subprocess(
+            duration=duration,
+            audio_path=audio_path,
+            question=question,
+            expected_concepts=expected_concepts
+        )
 
-        # Fallback defaults if either thread returned None
+        self.speech_result = speech_res
+        self.answer_result = answer_res
+
+        # Fallback defaults if vision returned None
         if not self.vision_result or not isinstance(self.vision_result, dict):
             self.vision_result = {
                 "emotion": "Neutral",
@@ -140,22 +182,6 @@ class InterviewService:
                 "background_natural": True,
                 "speech_score": 75
             }
-
-        # --------------------------------------------------
-        # Evaluate Candidate Answer
-        # --------------------------------------------------
-
-        transcript = self.speech_result.get("transcript", "")
-
-        try:
-            self.answer_result = evaluate_answer(
-                question,
-                transcript,
-                expected_concepts
-            )
-        except Exception as e:
-            print(f"Evaluation error: {e}")
-            self.answer_result = None
 
         if not self.answer_result or not isinstance(self.answer_result, dict):
             self.answer_result = {
