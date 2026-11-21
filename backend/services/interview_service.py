@@ -260,6 +260,8 @@ class InterviewService:
         if len(recommendations) == 0:
             recommendations.append("Excellent interview performance!")
 
+        transcript = self.speech_result.get("transcript", "")
+
         # --------------------------------------------------
         # Return Complete Result
         # --------------------------------------------------
@@ -269,6 +271,7 @@ class InterviewService:
             "question": question,
 
             # Vision
+            "vision": self.vision_result or {},
             "emotion": self.vision_result.get("emotion", "Neutral"),
             "eye_contact": self.vision_result.get("eye", "Looking Center"),
             "head_pose": self.vision_result.get("head", "Center"),
