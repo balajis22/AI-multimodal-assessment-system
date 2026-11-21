@@ -248,8 +248,9 @@ docker run -it --rm ai-assessment-app python -m backend.app
 
 ---
 
-## ☁️ Deployment (Streamlit Community Cloud)
+## ☁️ Cloud Deployment
 
+### 1. Streamlit Community Cloud (Recommended & Free)
 This repository includes a root `streamlit_app.py` entrypoint configured for Streamlit Community Cloud:
 
 1. Push your repository to **GitHub**.
@@ -261,6 +262,14 @@ This repository includes a root `streamlit_app.py` entrypoint configured for Str
    api_key = "YOUR_FIREBASE_WEB_API_KEY"
    ```
 5. Deploy! Dependencies use CPU-only PyTorch so cloud deployments stay lightweight and fast without downloading CUDA packages.
+
+### 2. Render (Docker Web Service)
+1. In Render Dashboard, click **New +** > **Web Service**.
+2. Connect your GitHub repository.
+3. Select **Docker** as the runtime.
+4. Under **Environment Variables**, add:
+   - `FIREBASE_API_KEY`: `your_firebase_web_api_key`
+5. Click **Create Web Service**. Render will automatically detect the `Dockerfile` and dynamic port `$PORT`.
 
 ---
 

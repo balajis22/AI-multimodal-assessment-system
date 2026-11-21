@@ -37,12 +37,12 @@ RUN pip install --no-cache-dir --upgrade pip setuptools && \
 # Copy application source code
 COPY . .
 
-# Expose Streamlit application port
+# Expose default application port
 EXPOSE 8501
 
 # Health check to ensure the container is responsive
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8501/_stcore/health || exit 1
+    CMD curl -f http://localhost:${PORT:-8501}/_stcore/health || exit 1
 
-# Default command: runs the complete system (frontend + backend)
-CMD ["streamlit", "run", "streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+# Default command: runs dynamically on Render ($PORT=10000), Hugging Face ($PORT=7860), or local Docker ($PORT=8501)
+CMD ["sh", "-c", "streamlit run streamlit_app.py --server.port=${PORT:-8501} --server.address=0.0.0.0 --server.headless=true --server.enableCORS=false --server.enableXsrfProtection=false"]
