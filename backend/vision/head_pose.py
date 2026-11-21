@@ -1,8 +1,6 @@
 import numpy as np
-from cvzone.FaceMeshModule import FaceMeshDetector
 
-# Create detector once
-detector = FaceMeshDetector(maxFaces=1)
+from backend.vision.face_detector import get_face_mesh_detector
 
 
 def detect_head_pose(frame):
@@ -12,7 +10,7 @@ def detect_head_pose(frame):
     Returns:
         direction (str)
     """
-
+    detector = get_face_mesh_detector()
     img, faces = detector.findFaceMesh(frame, draw=False)
 
     if not faces:

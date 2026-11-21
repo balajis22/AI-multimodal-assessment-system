@@ -1,11 +1,19 @@
-from tensorflow.keras.models import load_model
-from tensorflow.keras.applications.efficientnet import preprocess_input
-from cvzone.FaceMeshModule import FaceMeshDetector
-import numpy as np
 import cv2
+import numpy as np
+from tensorflow.keras.applications.efficientnet import preprocess_input
 
-# Load model
-model = load_model("backend/models/best_model.keras")
+from backend.vision.face_detector import get_face_mesh_detector
+
+_model = None
+
+
+def get_emotion_model():
+    global _model
+    if _model is None:
+        from tensorflow.keras.models import load_model
+        _model = load_model("backend/models/best_model.keras")
+    return _model
+
 
 emotion_labels = [
     "Angry",
@@ -17,12 +25,9 @@ emotion_labels = [
     "Surprise"
 ]
 
-# FaceMesh detector
-detector = FaceMeshDetector(maxFaces=1)
-
 
 def detect_emotion(frame):
-
+    detector = get_face_mesh_detector()
     img, faces = detector.findFaceMesh(frame, draw=False)
 
     if not faces:
@@ -51,6 +56,7 @@ def detect_emotion(frame):
 
     crop = np.expand_dims(crop, axis=0)
 
+    model = get_emotion_model()
     pred = model.predict(crop, verbose=0)[0]
 
     idx = np.argmax(pred)

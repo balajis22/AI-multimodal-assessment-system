@@ -1,7 +1,4 @@
-from cvzone.FaceMeshModule import FaceMeshDetector
-
-# Create detector once
-detector = FaceMeshDetector(maxFaces=1)
+from backend.vision.face_detector import get_face_mesh_detector
 
 
 def detect_eye_contact(frame):
@@ -11,7 +8,7 @@ def detect_eye_contact(frame):
     Returns:
         direction (str)
     """
-
+    detector = get_face_mesh_detector()
     img, faces = detector.findFaceMesh(frame, draw=False)
 
     if not faces:
