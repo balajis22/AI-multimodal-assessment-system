@@ -148,23 +148,30 @@ AI-multimodal-assessment-system/
 │   ├── services/
 │   │   └── interview_service.py # Orchestrator for camera, audio & AI analysis
 │   ├── training/              # Model training scripts & datasets
-│   └── vision/
-│       ├── emotion_detector.py# FER prediction using CNN
-│       ├── eye_contact.py     # Gaze & eye contact ratio computation
-│       ├── eye_tracker.py     # Iris & pupil tracking
-│       ├── face_detector.py   # MediaPipe face bounding & detection
-│       ├── head_pose.py       # 3D head pose estimation (pitch, yaw, roll)
-│       └── vision_pipeline.py # Real-time frame processing loop
+│   ├── vision/
+│   │   ├── emotion_detector.py# FER prediction using CNN
+│   │   ├── eye_contact.py     # Gaze & eye contact ratio computation
+│   │   ├── eye_tracker.py     # Iris & pupil tracking
+│   │   ├── face_detector.py   # MediaPipe face bounding & detection
+│   │   ├── head_pose.py       # 3D head pose estimation (pitch, yaw, roll)
+│   │   └── vision_pipeline.py # Real-time frame processing loop
+│   └── workers/
+│       └── speech_nlp_worker.py# Isolated subprocess worker for Whisper & SentenceTransformers
 ├── frontend/
 │   ├── app.py                 # Main Streamlit interview application & pages
 │   ├── avatars/               # Saved candidate square profile photos (Git-ignored)
-│   └── auth/
-│       ├── auth_ui.py         # Login, registration, MFA & settings UI
-│       ├── firebase_auth.py   # Firebase Identity Toolkit REST API client
-│       └── style.css          # Dark glassmorphism auth styles
+│   ├── auth/
+│   │   ├── auth_ui.py         # Login, registration, MFA & settings UI
+│   │   ├── firebase_auth.py   # Firebase Identity Toolkit REST API client
+│   │   └── style.css          # Dark glassmorphism auth styles
+│   └── components/
+│       └── video_recorder/    # Browser-native WebRTC/HTML5 live camera & 16kHz audio recorder
 ├── docs/                      # Project documentation & review notes
-├── requirements.txt           # Python dependencies
-├── streamlit_app.py           # Entrypoint wrapper for Streamlit Cloud
+├── Dockerfile                 # Production Linux Docker container definition
+├── docker-compose.yml         # Multi-service container orchestration
+├── .dockerignore              # Docker build exclusions
+├── requirements.txt           # Python dependencies (CPU-optimized PyTorch & TensorFlow)
+├── streamlit_app.py           # Entrypoint wrapper for cloud deployment
 └── README.md                  # Project documentation
 ```
 
@@ -248,28 +255,77 @@ docker run -it --rm ai-assessment-app python -m backend.app
 
 ---
 
-## ☁️ Cloud Deployment
+## ☁️ Cloud & Production Deployment
 
-### 1. Streamlit Community Cloud (Recommended & Free)
-This repository includes a root `streamlit_app.py` entrypoint configured for Streamlit Community Cloud:
+### 1. 🚀 Render (Docker Web Service Deployment)
+
+[Render](https://render.com) provides production-grade Docker container hosting with automated CI/CD builds, managed SSL certificates (HTTPS), and zero server maintenance. 
+
+Because web browsers require **HTTPS** to allow webcam and microphone access, deploying this application on Render ensures full camera and audio recording functionality out of the box.
+
+#### Step-by-Step Render Deployment:
+1. **Push your code to GitHub**:
+   Ensure all latest commits are pushed to your remote repository:
+   ```bash
+   git push origin main
+   ```
+2. **Create a New Web Service on Render**:
+   - Log into your [Render Dashboard](https://dashboard.render.com).
+   - Click **New +** in the top right corner and select **Web Service**.
+   - Under **Connect a repository**, link your GitHub account and select `AI-multimodal-assessment-system` (or enter its Git repository URL).
+3. **Configure Service Settings**:
+   - **Name**: `ai-multimodal-assessment-system` (or your chosen service name).
+   - **Region**: Select the region closest to your users (e.g., *Singapore*, *Frankfurt*, *Oregon*).
+   - **Branch**: `main`.
+   - **Runtime**: Select **Docker** (Render will automatically detect the root `Dockerfile`).
+   - **Instance Type / Plan**: Select **Starter** or **Standard** (at least 1 GB – 2 GB RAM recommended to comfortably run Whisper and the facial emotion classification models in memory).
+4. **Configure Environment Variables**:
+   Click on the **Environment** tab and add the following key-value pairs:
+   | Key | Value | Description |
+   |---|---|---|
+   | `FIREBASE_API_KEY` | `YOUR_FIREBASE_WEB_API_KEY` | Firebase Web API key for authentication |
+   | `PORT` | `8501` | *Optional* (Render automatically binds dynamic `$PORT` via the Dockerfile) |
+   | `PYTHONUNBUFFERED` | `1` | Ensures real-time console log streaming |
+5. **Configure Health Check**:
+   Under **Advanced Settings**, set the **Health Check Path** to:
+   ```text
+   /_stcore/health
+   ```
+6. **Deploy**:
+   - Click **Create Web Service**.
+   - Render will pull your repository, build the Docker container using `python:3.10-slim`, install system multimedia libraries (`ffmpeg`, `libportaudio2`, `libgl1`), download dependencies, and start Streamlit.
+   - Once deployed, your app will be live at: `https://<your-service-name>.onrender.com`.
+
+---
+
+### 2. 🎈 Streamlit Community Cloud (Alternative Free Hosting)
+This repository also includes a root `streamlit_app.py` entrypoint configured for direct deployment on Streamlit Community Cloud:
 
 1. Push your repository to **GitHub**.
 2. Connect your repository on [share.streamlit.io](https://share.streamlit.io/).
-3. Set the main file path to: `streamlit_app.py`.
+3. Set the **Main file path** to: `streamlit_app.py`.
 4. In your Streamlit Cloud app settings, navigate to **Secrets** and add:
    ```toml
    [firebase]
    api_key = "YOUR_FIREBASE_WEB_API_KEY"
    ```
-5. Deploy! Dependencies use CPU-only PyTorch so cloud deployments stay lightweight and fast without downloading CUDA packages.
+5. Deploy! Dependencies use CPU-optimized PyTorch and lazy-loaded singletons so the app stays lightweight and avoids unnecessary CUDA downloads.
 
-### 2. Render (Docker Web Service)
-1. In Render Dashboard, click **New +** > **Web Service**.
-2. Connect your GitHub repository.
-3. Select **Docker** as the runtime.
-4. Under **Environment Variables**, add:
-   - `FIREBASE_API_KEY`: `your_firebase_web_api_key`
-5. Click **Create Web Service**. Render will automatically detect the `Dockerfile` and dynamic port `$PORT`.
+---
+
+### 3. 🌐 Cloud Architecture: Live Video & Audio Recording
+
+Cloud container environments (Render Docker containers, Streamlit Cloud Linux instances) run in headless virtual machines without physical hardware webcams (`/dev/video0`) or physical audio cards (`sounddevice -1`).
+
+To ensure seamless candidate interviews in cloud environments, this project uses a **Browser-Native Virtual Interview Architecture**:
+- **Live Video Viewport (`frontend/components/video_recorder`)**: Uses HTML5 `getUserMedia` and `MediaStream` to stream the candidate's actual local webcam directly in the browser with 0ms latency.
+- **Synchronized Audio & Video Recording**:
+  - The browser's native `MediaRecorder` records the candidate's video response into a WebM stream.
+  - An in-browser `AudioContext` simultaneously captures and resamples the candidate's voice into clean **16kHz mono PCM WAV** audio.
+- **Process Isolation (Zero LLVM Conflicts)**:
+  - Computer Vision analysis (MediaPipe FaceMesh + OpenCV + Emotion CNN) runs in the main application process.
+  - Whisper speech transcription and SentenceTransformers semantic NLP run in an isolated worker subprocess (`backend/workers/speech_nlp_worker.py`).
+  - This eliminates memory collisions between PyTorch and TensorFlow LLVM compilers on Linux servers.
 
 ---
 
