@@ -1,6 +1,5 @@
 import cv2
 import numpy as np
-from tensorflow.keras.applications.efficientnet import preprocess_input
 
 from backend.vision.face_detector import get_face_mesh_detector
 
@@ -50,6 +49,8 @@ def detect_emotion(frame):
 
     crop = cv2.resize(crop, (224, 224))
     crop = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
+
+    from tensorflow.keras.applications.efficientnet import preprocess_input
 
     crop = crop.astype("float32")
     crop = preprocess_input(crop)

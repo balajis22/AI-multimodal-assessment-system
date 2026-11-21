@@ -1,5 +1,4 @@
 from backend.ai.question_bank import get_question
-from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 import re
 
@@ -14,6 +13,7 @@ _semantic_model = None
 def get_semantic_model():
     global _semantic_model
     if _semantic_model is None:
+        from sentence_transformers import SentenceTransformer
         print("Loading semantic evaluation model lazily...")
         _semantic_model = SentenceTransformer("all-MiniLM-L6-v2")
         print("Semantic model loaded!")

@@ -1,9 +1,6 @@
-import whisper
-import tensorflow_hub as hub
-import librosa
+import re
 import numpy as np
 import sounddevice as sd
-import re
 
 from scipy.io.wavfile import write
 
@@ -20,6 +17,7 @@ _yamnet_labels = None
 def get_whisper_model():
     global _whisper_model
     if _whisper_model is None:
+        import whisper
         print("Loading Whisper model lazily...")
         _whisper_model = whisper.load_model("base")
         print("Whisper model loaded!")
@@ -30,6 +28,7 @@ def get_yamnet_model():
     global _yamnet_model, _yamnet_labels
     if _yamnet_model is None:
         try:
+            import tensorflow_hub as hub
             print("Loading YAMNet model lazily...")
             _yamnet_model = hub.load("https://tfhub.dev/google/yamnet/1")
             class_map = _yamnet_model.class_map_path().numpy().decode("utf-8")
@@ -194,6 +193,8 @@ def analyze_speech(seconds=10, start_event=None):
     # ----------------------------------------------
     # Sound Classification
     # ----------------------------------------------
+
+    import librosa
 
     waveform, sr = librosa.load(
         "sample.wav",
