@@ -1,3 +1,4 @@
+from pathlib import Path
 import re
 import numpy as np
 import sounddevice as sd
@@ -67,22 +68,24 @@ def record_and_transcribe(
 
     print("Speak now...")
 
-    recording = sd.rec(
-        int(seconds * fs),
-        samplerate=fs,
-        channels=1,
-        dtype="int16"
-    )
-
-    sd.wait()
-
-    write(
-        filename,
-        fs,
-        recording
-    )
-
-    print("Recording complete!")
+    try:
+        recording = sd.rec(
+            int(seconds * fs),
+            samplerate=fs,
+            channels=1,
+            dtype="int16"
+        )
+        sd.wait()
+        write(
+            filename,
+            fs,
+            recording
+        )
+        print("Recording complete!")
+    except Exception as exc:
+        print(f"Warning: Native microphone unavailable ({exc}). Using existing sample.")
+        if not Path(filename).is_file():
+            write(filename, fs, np.zeros(int(seconds * fs), dtype="int16"))
 
     # ----------------------------------------------
     # Whisper transcription
@@ -114,22 +117,30 @@ def analyze_speech(seconds=10, start_event=None):
 
     print("Speak now...")
 
-    recording = sd.rec(
-        int(seconds * fs),
-        samplerate=fs,
-        channels=1,
-        dtype="int16"
-    )
-
-    sd.wait()
-
-    write(
-        "sample.wav",
-        fs,
-        recording
-    )
-
-    print("Recording complete!")
+    try:
+        recording = sd.rec(
+            int(seconds * fs),
+            samplerate=fs,
+            channels=1,
+            dtype="int16"
+        )
+        sd.wait()
+        write(
+            "sample.wav",
+            fs,
+            recording
+        )
+        print("Recording complete!")
+    except Exception as exc:
+        print(f"Warning: Native microphone unavailable on cloud ({exc}). Using sample audio.")
+        if Path("sample.wav").is_file():
+            from scipy.io.wavfile import read
+            _, recording = read("sample.wav")
+            if len(recording.shape) > 1:
+                recording = recording[:, 0]
+        else:
+            recording = np.zeros(int(seconds * fs), dtype="int16")
+            write("sample.wav", fs, recording)
 
     # Convert in-memory int16 audio to normalized float32 for Whisper (no ffmpeg needed)
     audio_float = recording.flatten().astype(np.float32) / 32768.0
