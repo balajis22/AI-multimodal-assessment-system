@@ -38,11 +38,12 @@ class InterviewService:
             print(f"Vision error: {e}")
             self.vision_result = None
 
-    def run_speech(self, duration, start_event):
+    def run_speech(self, duration, start_event, audio_source=None):
         try:
             self.speech_result = analyze_speech(
                 duration,
-                start_event
+                start_event,
+                audio_source=audio_source
             )
         except Exception as e:
             print(f"Speech error: {e}")
@@ -61,8 +62,12 @@ class InterviewService:
         status_callback=None,
         precomputed_vision=None,
         source=0,
+        video_path=None,
+        audio_path=None,
         **kwargs
     ):
+        if video_path is not None:
+            source = video_path
         if frame_callback is None and "frame_callback" in kwargs:
             frame_callback = kwargs["frame_callback"]
         if precomputed_vision is None and "precomputed_vision" in kwargs:
@@ -96,7 +101,7 @@ class InterviewService:
         # --------------------------------------------------
         speech_thread = threading.Thread(
             target=self.run_speech,
-            args=(duration, start_event)
+            args=(duration, start_event, audio_path)
         )
 
         speech_thread.start()

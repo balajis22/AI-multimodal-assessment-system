@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Virtual Interview Live Video & Audio Recorder</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    body {
+      background: transparent;
+      color: #ffffff;
+      overflow: hidden;
+      padding: 6px;
+    }
+
+    .interview-card {
+      background: #090a10;
+      border: 1px solid rgba(255, 45, 117, 0.3);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      position: relative;
+    }
+
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 10px #10b981;
+    }
+
+    .dot.recording {
+      background: #ff2d75;
+      box-shadow: 0 0 14px #ff2d75;
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(1.15); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+
+    .res-badge {
+      font-size: 0.72rem;
+      background: rgba(255, 45, 117, 0.15);
+      color: #ff6699;
+      border: 1px solid rgba(255, 45, 117, 0.3);
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-weight: 600;
+      font-family: monospace;
+    }
+
+    .video-viewport {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 9.5;
+      background: #000000;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1); /* Mirror camera */
+    }
+
+    .overlay-timer {
+      position: absolute;
+      top: 12px;
+      right: 14px;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 45, 117, 0.4);
+      border-radius: 8px;
+      padding: 4px 10px;
+      font-family: monospace;
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: #ff6699;
+      display: none;
+    }
+
+    .overlay-countdown {
+      position: absolute;
+      font-size: 4.5rem;
+      font-weight: 900;
+      color: #ffffff;
+      text-shadow: 0 0 25px #ff2d75;
+      display: none;
+      z-index: 10;
+    }
+
+    .controls-bar {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .audio-meter-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.75rem;
+      color: #a1a1aa;
+    }
+
+    .audio-meter-bg {
+      flex: 1;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .audio-meter-fill {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, #10b981, #00f2fe, #ff2d75);
+      border-radius: 4px;
+      transition: width 0.08s ease;
+    }
+
+    .btn-action {
+      width: 100%;
+      padding: 13px 18px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-start {
+      background: linear-gradient(135deg, #ff2d75 0%, #a855f7 100%);
+      color: #ffffff;
+      box-shadow: 0 4px 18px rgba(255, 45, 117, 0.4);
+    }
+
+    .btn-start:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 24px rgba(255, 45, 117, 0.6);
+    }
+
+    .btn-stop {
+      background: #ef4444;
+      color: #ffffff;
+      box-shadow: 0 4px 18px rgba(239, 68, 68, 0.4);
+    }
+
+    .btn-stop:hover {
+      background: #dc2626;
+    }
+
+    .btn-disabled {
+      background: #27272a;
+      color: #71717a;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .permission-error {
+      display: none;
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 0.82rem;
+      color: #fca5a5;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="interview-card" id="cardContainer">
+    <div class="header-bar">
+      <div class="status-badge" id="statusBadge">
+        <span class="dot" id="statusDot"></span>
+        <span id="statusText">Camera Active · Standby</span>
+      </div>
+      <span class="res-badge">Virtual Cockpit</span>
+    </div>
+
+    <div class="video-viewport">
+      <video id="liveVideo" autoplay playsinline muted></video>
+      <div class="overlay-timer" id="overlayTimer">REC 00:00 / 00:20</div>
+      <div class="overlay-countdown" id="overlayCountdown">3</div>
+    </div>
+
+    <div class="permission-error" id="permError">
+      ⚠️ <strong>Camera or Microphone access was denied.</strong><br>
+      Please click the lock or camera icon in your browser address bar to allow permissions, then refresh this page.
+    </div>
+
+    <div class="controls-bar">
+      <div class="audio-meter-row">
+        <span>🎤 Mic Level</span>
+        <div class="audio-meter-bg">
+          <div class="audio-meter-fill" id="audioMeter"></div>
+        </div>
+        <span id="meterDb">Active</span>
+      </div>
+
+      <button class="btn-action btn-start" id="actionBtn" onclick="handleClick()">
+        <span>▶ Start Virtual Interview (20s)</span>
+      </button>
+    </div>
+  </div>
+
+  <script>
+    // ----------------------------------------------------
+    // Streamlit Bridge Lifecycle
+    // ----------------------------------------------------
+    function sendToStreamlit(value) {
+      window.parent.postMessage({
+        isStreamlitMessage: true,
+        type: "streamlit:setComponentValue",
+        value: value,
+        dataType: "json"
+      }, "*");
+    }
+
+    function setFrameHeight() {
+      const height = document.getElementById("cardContainer").offsetHeight + 24;
+      window.parent.postMessage({
+        isStreamlitMessage: true,
+        type: "streamlit:setFrameHeight",
+        height: height
+      }, "*");
+    }
+
+    window.parent.postMessage({
+      isStreamlitMessage: true,
+      type: "streamlit:componentReady",
+      apiVersion: 1
+    }, "*");
+
+    // ----------------------------------------------------
+    // State & Variables
+    // ----------------------------------------------------
+    let targetDuration = 20;
+    let stream = null;
+    let audioContext = null;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let audioSamples = [];
+    let scriptProcessor = null;
+    let isRecording = false;
+    let timerInterval = null;
+    let timeElapsed = 0;
+
+    // Listen for arguments from Python
+    window.addEventListener("message", function(event) {
+      if (event.data && event.data.type === "streamlit:render") {
+        const args = event.data.args;
+        if (args && args.duration) {
+          targetDuration = parseInt(args.duration) || 20;
+          if (!isRecording) {
+            document.getElementById("actionBtn").innerText = `▶ Start Virtual Interview (${targetDuration}s)`;
+          }
+        }
+      }
+    });
+
+    // ----------------------------------------------------
+    // Initialize Camera & Microphone
+    // ----------------------------------------------------
+    async function initMedia() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } },
+          audio: { echoCancellation: true, noiseSuppression: true }
+        });
+
+        const videoEl = document.getElementById("liveVideo");
+        videoEl.srcObject = stream;
+        await videoEl.play();
+
+        setupAudioAnalyzer(stream);
+        setFrameHeight();
+      } catch (err) {
+        console.error("Camera access error:", err);
+        document.getElementById("permError").style.display = "block";
+        document.getElementById("statusDot").style.background = "#ef4444";
+        document.getElementById("statusText").innerText = "Camera Access Blocked";
+        setFrameHeight();
+      }
+    }
+
+    // ----------------------------------------------------
+    // Audio Visualizer & 16kHz WAV Recorder
+    // ----------------------------------------------------
+    function setupAudioAnalyzer(mediaStream) {
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        audioContext = new AudioCtx();
+        const source = audioContext.createMediaStreamSource(mediaStream);
+
+        // Analyzer for live volume visualizer
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        const meterFill = document.getElementById("audioMeter");
+
+        function drawMeter() {
+          if (!stream) return;
+          analyser.getByteFrequencyData(dataArray);
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            sum += dataArray[i];
+          }
+          let avg = sum / dataArray.length;
+          let percent = Math.min(100, Math.round((avg / 128) * 100));
+          meterFill.style.width = percent + "%";
+          requestAnimationFrame(drawMeter);
+        }
+        drawMeter();
+
+        // ScriptProcessor to capture raw PCM audio buffer
+        scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+        scriptProcessor.onaudioprocess = function(e) {
+          if (!isRecording) return;
+          const inputData = e.inputBuffer.getChannelData(0);
+          audioSamples.push(new Float32Array(inputData));
+        };
+        source.connect(scriptProcessor);
+        scriptProcessor.connect(audioContext.destination);
+      } catch (e) {
+        console.warn("Audio Context init warning:", e);
+      }
+    }
+
+    // ----------------------------------------------------
+    // Interview Start / Finish Handlers
+    // ----------------------------------------------------
+    async function handleClick() {
+      if (!stream) {
+        await initMedia();
+        return;
+      }
+
+      if (isRecording) {
+        finishRecording();
+        return;
+      }
+
+      startInterviewCountdown();
+    }
+
+    function startInterviewCountdown() {
+      const countdownEl = document.getElementById("overlayCountdown");
+      const btn = document.getElementById("actionBtn");
+      btn.className = "btn-action btn-disabled";
+      btn.innerText = "Get Ready...";
+      countdownEl.style.display = "block";
+
+      let count = 3;
+      countdownEl.innerText = count;
+
+      const countInterval = setInterval(() => {
+        count--;
+        if (count > 0) {
+          countdownEl.innerText = count;
+        } else {
+          clearInterval(countInterval);
+          countdownEl.style.display = "none";
+          startRecording();
+        }
+      }, 900);
+    }
+
+    function startRecording() {
+      isRecording = true;
+      recordedChunks = [];
+      audioSamples = [];
+      timeElapsed = 0;
+
+      if (audioContext && audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+
+      let mimeType = 'video/webm;codecs=vp8,opus';
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : 'video/mp4';
+      }
+
+      try {
+        mediaRecorder = new MediaRecorder(stream, { mimeType: mimeType });
+      } catch (e) {
+        mediaRecorder = new MediaRecorder(stream);
+      }
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          recordedChunks.push(event.data);
+        }
+      };
+
+      mediaRecorder.start(200);
+
+      // UI Updates
+      document.getElementById("statusDot").className = "dot recording";
+      document.getElementById("statusText").innerText = "🔴 Live Interview Recording";
+      const timerEl = document.getElementById("overlayTimer");
+      timerEl.style.display = "block";
+      timerEl.innerText = `REC 00:00 / 00:${targetDuration < 10 ? '0' + targetDuration : targetDuration}`;
+
+      const btn = document.getElementById("actionBtn");
+      btn.className = "btn-action btn-stop";
+      btn.innerText = "⏹ Finish Interview Early";
+
+      timerInterval = setInterval(() => {
+        timeElapsed++;
+        const rem = targetDuration - timeElapsed;
+        timerEl.innerText = `REC 00:${timeElapsed < 10 ? '0' + timeElapsed : timeElapsed} / 00:${targetDuration < 10 ? '0' + targetDuration : targetDuration}`;
+
+        if (timeElapsed >= targetDuration) {
+          finishRecording();
+        }
+      }, 1000);
+    }
+
+    function finishRecording() {
+      if (!isRecording) return;
+      isRecording = false;
+      clearInterval(timerInterval);
+
+      const btn = document.getElementById("actionBtn");
+      btn.className = "btn-action btn-disabled";
+      btn.innerText = "⏳ Processing AI Assessment...";
+
+      document.getElementById("statusDot").className = "dot";
+      document.getElementById("statusDot").style.background = "#ff2d75";
+      document.getElementById("statusText").innerText = "Interview Completed · Analyzing...";
+      document.getElementById("overlayTimer").style.display = "none";
+
+      mediaRecorder.onstop = async () => {
+        const videoBlob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'video/webm' });
+        
+        // Downsample audio samples to 16kHz mono WAV
+        const sampleRate = audioContext ? audioContext.sampleRate : 44100;
+        const wavBlob = export16kWav(audioSamples, sampleRate);
+
+        // Convert Blobs to Base64
+        const videoBase64 = await blobToBase64(videoBlob);
+        const audioBase64 = await blobToBase64(wavBlob);
+
+        sendToStreamlit({
+          video: videoBase64,
+          audio: audioBase64,
+          duration: timeElapsed
+        });
+      };
+
+      mediaRecorder.stop();
+    }
+
+    // ----------------------------------------------------
+    // Helpers: Base64 & 16kHz WAV Encoding
+    // ----------------------------------------------------
+    function blobToBase64(blob) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    function export16kWav(chunks, originalSampleRate) {
+      // Flatten chunks into a single Float32Array
+      let totalLen = 0;
+      for (let i = 0; i < chunks.length; i++) {
+        totalLen += chunks[i].length;
+      }
+      const flat = new Float32Array(totalLen);
+      let offset = 0;
+      for (let i = 0; i < chunks.length; i++) {
+        flat.set(chunks[i], offset);
+        offset += chunks[i].length;
+      }
+
+      // Resample to 16,000 Hz for Whisper
+      const targetRate = 16000;
+      const resampled = resampleAudio(flat, originalSampleRate, targetRate);
+
+      // Create standard PCM WAV header
+      const buffer = new ArrayBuffer(44 + resampled.length * 2);
+      const view = new DataView(buffer);
+
+      function writeStr(offset, str) {
+        for (let i = 0; i < str.length; i++) {
+          view.setUint8(offset + i, str.charCodeAt(i));
+        }
+      }
+
+      writeStr(0, 'RIFF');
+      view.setUint32(4, 36 + resampled.length * 2, true);
+      writeStr(8, 'WAVE');
+      writeStr(12, 'fmt ');
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true); // PCM
+      view.setUint16(22, 1, true); // Mono
+      view.setUint32(24, targetRate, true);
+      view.setUint32(28, targetRate * 2, true);
+      view.setUint16(32, 2, true);
+      view.setUint16(34, 16, true);
+      writeStr(36, 'data');
+      view.setUint32(40, resampled.length * 2, true);
+
+      let p = 44;
+      for (let i = 0; i < resampled.length; i++, p += 2) {
+        let s = Math.max(-1, Math.min(1, resampled[i]));
+        view.setInt16(p, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+      }
+
+      return new Blob([view], { type: 'audio/wav' });
+    }
+
+    function resampleAudio(input, inRate, outRate) {
+      if (inRate === outRate) return input;
+      const ratio = inRate / outRate;
+      const newLen = Math.round(input.length / ratio);
+      const output = new Float32Array(newLen);
+      for (let i = 0; i < newLen; i++) {
+        const origIdx = i * ratio;
+        const low = Math.floor(origIdx);
+        const high = Math.min(input.length - 1, low + 1);
+        const weight = origIdx - low;
+        output[i] = input[low] * (1 - weight) + input[high] * weight;
+      }
+      return output;
+    }
+
+    // Auto-init on load
+    window.addEventListener("DOMContentLoaded", () => {
+      initMedia();
+      setTimeout(setFrameHeight, 300);
+    });
+  </script>
+</body>
+</html>

@@ -192,9 +192,9 @@ def analyze_interview(duration=20, start_event=None, frame_callback=None, source
                 break
 
         # ---------------------------------
-        # Stop after duration seconds
+        # Stop after duration seconds for live hardware camera
         # ---------------------------------
-        if time.time() - start_time >= duration:
+        if not isinstance(source, str) and (time.time() - start_time >= duration):
             break
 
     cap.release()

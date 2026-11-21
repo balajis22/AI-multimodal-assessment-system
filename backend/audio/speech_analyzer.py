@@ -82,42 +82,60 @@ def record_and_transcribe(
 # Full Speech Analysis
 # --------------------------------------------------
 
-def analyze_speech(seconds=10, start_event=None):
+def analyze_speech(seconds=10, start_event=None, audio_source=None):
 
     fs = 16000
 
-   
-
-   
     if start_event is not None:
         start_event.wait()
 
-    print("Speak now...")
-
-    try:
-        recording = sd.rec(
-            int(seconds * fs),
-            samplerate=fs,
-            channels=1,
-            dtype="int16"
-        )
-        sd.wait()
-        write(
-            "sample.wav",
-            fs,
-            recording
-        )
-        print("Recording complete!")
-    except Exception as exc:
-        print(f"Warning: Native microphone unavailable on cloud ({exc}). Using sample audio.")
-        if Path("sample.wav").is_file():
-            from scipy.io.wavfile import read
-            _, recording = read("sample.wav")
+    if audio_source and Path(audio_source).is_file():
+        print(f"Analyzing recorded candidate audio from {audio_source}...")
+        try:
+            from scipy.io.wavfile import read as wav_read
+            sr, recording = wav_read(str(audio_source))
             if len(recording.shape) > 1:
                 recording = recording[:, 0]
-        else:
-            recording = np.zeros(int(seconds * fs), dtype="int16")
-            write("sample.wav", fs, recording)
+            if recording.dtype != np.int16:
+                if np.issubdtype(recording.dtype, np.floating):
+                    recording = (np.clip(recording, -1.0, 1.0) * 32767).astype(np.int16)
+                else:
+                    recording = recording.astype(np.int16)
+        except Exception as exc:
+            print(f"Warning: scipy read failed ({exc}), attempting whisper load_audio")
+            try:
+                import whisper
+                audio_float_loaded = whisper.load_audio(str(audio_source))
+                recording = (np.clip(audio_float_loaded, -1.0, 1.0) * 32767).astype(np.int16)
+            except Exception as e2:
+                print(f"Error loading audio: {e2}")
+                recording = np.zeros(int(seconds * fs), dtype="int16")
+    else:
+        print("Speak now...")
+        try:
+            recording = sd.rec(
+                int(seconds * fs),
+                samplerate=fs,
+                channels=1,
+                dtype="int16"
+            )
+            sd.wait()
+            write(
+                "sample.wav",
+                fs,
+                recording
+            )
+            print("Recording complete!")
+        except Exception as exc:
+            print(f"Warning: Native microphone unavailable on cloud ({exc}). Using sample audio.")
+            if Path("sample.wav").is_file():
+                from scipy.io.wavfile import read
+                _, recording = read("sample.wav")
+                if len(recording.shape) > 1:
+                    recording = recording[:, 0]
+            else:
+                recording = np.zeros(int(seconds * fs), dtype="int16")
+                write("sample.wav", fs, recording)
 
     # Convert in-memory int16 audio to normalized float32 for Whisper (no ffmpeg needed)
     audio_float = recording.flatten().astype(np.float32) / 32768.0
