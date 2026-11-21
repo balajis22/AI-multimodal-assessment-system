@@ -218,6 +218,36 @@ Open your browser and navigate to `http://localhost:8501`.
 
 ---
 
+## 🐳 Running with Docker
+
+You can run the entire system inside a container without installing local Python packages:
+
+### 1. Build and Run with Docker Compose (Recommended)
+Make sure Docker Desktop is running, then run:
+```bash
+docker compose up --build
+```
+Navigate to `http://localhost:8501`.
+
+### 2. Build and Run with Docker CLI
+```bash
+# Build the image
+docker build -t ai-assessment-app .
+
+# Run the container
+docker run -p 8501:8501 --env-file .env ai-assessment-app
+```
+
+### 3. Run Backend CLI Evaluator in Container (Optional)
+To run backend tasks or the standalone CLI script inside Docker:
+```bash
+docker compose run --rm backend-cli
+# Or using Docker CLI:
+docker run -it --rm ai-assessment-app python -m backend.app
+```
+
+---
+
 ## ☁️ Deployment (Streamlit Community Cloud)
 
 This repository includes a root `streamlit_app.py` entrypoint configured for Streamlit Community Cloud:

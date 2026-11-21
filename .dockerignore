@@ -1,0 +1,31 @@
+# Git & Environment
+.git/
+.gitignore
+.env
+.devcontainer/
+
+# Python Virtual Environments & Caches
+.venv/
+venv/
+ENV/
+env/
+__pycache__/
+*/**/__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+
+# Streamlit Local Secrets (pass via environment variables instead)
+.streamlit/secrets.toml
+
+# Training Datasets, Notebooks & Experiments
+datasets/
+notebooks/
+results/
+
+# System / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log

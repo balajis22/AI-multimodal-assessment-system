@@ -1,0 +1,29 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai_assessment_app
+    ports:
+      - "8501:8501"
+    environment:
+      - TF_CPP_MIN_LOG_LEVEL=3
+      - CUDA_VISIBLE_DEVICES=
+      - FIREBASE_API_KEY=${firebase_api:-${FIREBASE_API_KEY:-}}
+    env_file:
+      - path: .env
+        required: false
+    restart: unless-stopped
+
+  # Optional service profile to run backend standalone tasks/scripts
+  backend-cli:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai_assessment_backend_cli
+    command: ["python", "-m", "backend.app"]
+    profiles:
+      - backend
+    environment:
+      - TF_CPP_MIN_LOG_LEVEL=3
+      - CUDA_VISIBLE_DEVICES=
