@@ -16,9 +16,7 @@ matplotlib
 
 # Audio Processing & Speech Recognition
 sounddevice
-librosa
 openai-whisper
-tensorflow-hub
 
 # NLP & Semantic Analysis
 sentence-transformers

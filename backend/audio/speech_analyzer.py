@@ -3,7 +3,7 @@ import re
 import numpy as np
 import sounddevice as sd
 
-from scipy.io.wavfile import write
+from scipy.io.wavfile import write, read as wav_read
 
 
 # --------------------------------------------------
@@ -11,8 +11,6 @@ from scipy.io.wavfile import write
 # --------------------------------------------------
 
 _whisper_model = None
-_yamnet_model = None
-_yamnet_labels = None
 
 
 def get_whisper_model():
@@ -23,27 +21,6 @@ def get_whisper_model():
         _whisper_model = whisper.load_model("base")
         print("Whisper model loaded!")
     return _whisper_model
-
-
-def get_yamnet_model():
-    global _yamnet_model, _yamnet_labels
-    if _yamnet_model is None:
-        try:
-            import tensorflow_hub as hub
-            print("Loading YAMNet model lazily...")
-            _yamnet_model = hub.load("https://tfhub.dev/google/yamnet/1")
-            class_map = _yamnet_model.class_map_path().numpy().decode("utf-8")
-            with open(class_map) as f:
-                _yamnet_labels = [
-                    line.strip().split(",")[2]
-                    for line in f.readlines()[1:]
-                ]
-            print("YAMNet model loaded!")
-        except Exception as exc:
-            print(f"Warning: Could not load YAMNet ({exc}). Fallback to speech default.")
-            _yamnet_model = None
-            _yamnet_labels = []
-    return _yamnet_model, _yamnet_labels
 
 
 # --------------------------------------------------
@@ -202,56 +179,35 @@ def analyze_speech(seconds=10, start_event=None):
     )
 
     # ----------------------------------------------
-    # Sound Classification
+    # Acoustic Environment & Background Analysis
     # ----------------------------------------------
 
-    import librosa
+    sound = "Speech / Natural Environment"
+    confidence = 0.95
+    natural = True
 
-    waveform, sr = librosa.load(
-        "sample.wav",
-        sr=16000
-    )
+    if Path("sample.wav").is_file():
+        try:
+            _, wav_data = wav_read("sample.wav")
+            if len(wav_data.shape) > 1:
+                wav_data = wav_data[:, 0]
+            wav_float = wav_data.astype(np.float32) / 32768.0
+            rms = float(np.sqrt(np.mean(wav_float**2))) if len(wav_float) > 0 else 0.0
 
-    yamnet, labels = get_yamnet_model()
-    if yamnet is not None and labels:
-        scores, embeddings, spectrogram = yamnet(
-            waveform
-        )
-
-        scores = scores.numpy()
-
-        mean_scores = np.mean(
-            scores,
-            axis=0
-        )
-
-        idx = np.argmax(
-            mean_scores
-        )
-
-        sound = labels[idx]
-
-        confidence = float(
-            mean_scores[idx]
-        )
-    else:
-        sound = "Speech"
-        confidence = 0.95
-
-    NATURAL = [
-        "Rain",
-        "Thunder",
-        "Wind",
-        "Water",
-        "Ocean",
-        "Bird",
-        "Stream"
-    ]
-
-    natural = any(
-        x.lower() in sound.lower()
-        for x in NATURAL
-    )
+            if rms > 0.45:
+                sound = "High Background Noise"
+                confidence = 0.85
+                natural = False
+            elif rms < 0.01:
+                sound = "Quiet / Ambient"
+                confidence = 0.92
+                natural = True
+            else:
+                sound = "Natural Environment"
+                confidence = 0.95
+                natural = True
+        except Exception:
+            pass
 
     # ----------------------------------------------
     # Speech Score
