@@ -739,8 +739,6 @@ elif st.session_state.current_page == "interview":
     st.subheader(f"{q_diff} · {st.session_state.active_role}")
     st.caption(f"Time Window: {st.session_state.duration} seconds")
     st.markdown(f"> \"{q_text}\"")
-    if q_concepts:
-        st.markdown(" ".join(f"**{concept['name']}**" for concept in q_concepts))
 
     # 2-Column Cockpit Layout
     cam_col, tel_col = st.columns([1.15, 0.85], gap="large")
